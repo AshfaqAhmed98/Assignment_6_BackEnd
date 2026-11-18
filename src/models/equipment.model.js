@@ -32,6 +32,10 @@ const equipmentSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    ownerId: {
+      type: String,
+      index: true,
+    },
     approvalStatus: {
       type: String,
       enum: ["pending", "approved", "rejected"],

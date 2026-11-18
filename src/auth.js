@@ -11,6 +11,14 @@ const validateSignUp = createAuthMiddleware(async (context) => {
   }
 
   const { name, password, image } = context.body ?? {};
+  const role = context.body?.role;
+
+  if (role !== undefined && role !== "Customer" && role !== "Owner") {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "Choose either a Customer or Owner account. Admin access is assigned by an administrator.",
+    });
+  }
 
   if (
     typeof name !== "string" ||
@@ -102,7 +110,7 @@ export function createAuth() {
           type: "string",
           required: true,
           defaultValue: "Customer",
-          input: false,
+          input: true,
         },
       },
     },

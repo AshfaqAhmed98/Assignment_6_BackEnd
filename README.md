@@ -40,6 +40,24 @@ For an HTTPS backend, Better Auth cookies use `SameSite=None; Secure` so the
 configured frontend can make credentialed cross-origin requests; local HTTP
 development keeps `SameSite=Lax`.
 
+Public email signup accepts `role: "Customer"` or `role: "Owner"`; an omitted
+role defaults to `Customer`. Other values, including `Admin`, are rejected by
+the server. Admin assignment is an operator-only database action. After
+verifying the target account and taking the normal database backup, a trusted
+MongoDB operator can promote that account with:
+
+```javascript
+db.user.updateOne(
+  { email: "admin@example.com" },
+  { $set: { role: "Admin" } },
+);
+```
+
+Run this only in the intended environment with privileged database access; do
+not expose an admin-promotion endpoint or credential in the frontend. The
+role is included in newly issued JWTs, so have a promoted user sign in again
+to obtain a token with the updated role.
+
 Google sign-in is enabled when both `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` are set. In Google Cloud Console, add
 `<BETTER_AUTH_URL>/api/auth/callback/google` as an authorized redirect URI.
@@ -59,19 +77,35 @@ The `@better-auth/infra` package uses its default Dash and KV service URLs unles
 `BETTER_AUTH_API_URL` or `BETTER_AUTH_KV_URL` are configured. The `sentinel`
 plugin remains disabled.
 
-## Featured equipment
+## Equipment roles and permissions
 
 `GET /api/equipment/featured` is public and returns at most six approved
 equipment documents. `GET /api/equipment/:id` requires
 `Authorization: Bearer <JWT>` from an authenticated Better Auth session and
 returns an approved equipment item. Missing, invalid, or expired tokens are
-rejected with HTTP 401. New equipment defaults to `approvalStatus: "pending"`
-and is not included until an administrator or database process changes it to
-`"approved"`.
+rejected with HTTP 401; authenticated users without the required role receive
+HTTP 403.
+
+| Endpoint | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/equipment/featured` | Public | Browse approved equipment |
+| `GET /api/equipment/:id` | Customer, Owner, Admin | Read an approved item |
+| `GET /api/equipment/mine` | Owner, Admin | List owned items (Admin sees all) |
+| `POST /api/equipment` | Owner, Admin | Create a pending listing |
+| `PATCH /api/equipment/:id` | Owner of item, Admin | Edit a listing; it returns to pending review |
+| `DELETE /api/equipment/:id` | Owner of item, Admin | Delete a listing |
+| `GET /api/equipment/admin/pending` | Admin | List pending submissions |
+| `PATCH /api/equipment/admin/:id/approval` | Admin | Set `approvalStatus` to `approved` or `rejected` |
+
+Every owner mutation is scoped to the JWT subject stored as `ownerId`; changing
+an item ID cannot grant access to another owner's listing. New equipment
+defaults to `approvalStatus: "pending"` and is not shown in public results
+until an Admin approves it. Customer booking management is not implemented yet.
 
 Each equipment document has `name`, `category`, `location`, `dailyRate`,
-`image`, `description`, and `approvalStatus` fields. `image` should be a URL or
-path usable by the frontend.
+`image`, `description`, `approvalStatus`, and (for owner-created listings)
+`ownerId`. `image` should be an HTTP(S) URL or a root-relative path usable by
+the frontend.
 
 Example document to add in the `equipments` collection:
 
