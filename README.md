@@ -31,6 +31,24 @@ uppercase and lowercase letters, and may be up to 128 characters. Email
 verification is not currently required, and successful sign-up starts a
 session.
 
+The JWT plugin exposes `GET /api/auth/token` for a signed, 15-minute JWT and
+`GET /api/auth/jwks` for its public signing keys. The token endpoint requires an
+authenticated Better Auth session. JWTs include the user's `role` claim, which
+defaults to `Customer`; browser sessions continue to use Better Auth's
+HttpOnly cookies. Do not put access tokens in local or session storage.
+For an HTTPS backend, Better Auth cookies use `SameSite=None; Secure` so the
+configured frontend can make credentialed cross-origin requests; local HTTP
+development keeps `SameSite=Lax`.
+
+Google sign-in is enabled when both `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` are set. In Google Cloud Console, add
+`<BETTER_AUTH_URL>/api/auth/callback/google` as an authorized redirect URI.
+Use the exact backend origin configured in `BETTER_AUTH_URL` (including its
+scheme); a public HTTPS origin is required for Google's callback in deployed
+environments. Leave both variables empty to keep email/password authentication
+available without Google sign-in. Email-based password reset is not configured
+until an email delivery provider is added.
+
 Better Auth stores its own user, account, and session records in MongoDB. The
 MongoDB adapter runs without transactions so it also works with a standalone
 local MongoDB server. Existing records from the former custom registration
@@ -43,9 +61,13 @@ plugin remains disabled.
 
 ## Featured equipment
 
-`GET /api/equipment/featured` returns at most six approved equipment documents.
-New equipment defaults to `approvalStatus: "pending"` and is not included until
-an administrator or database process changes it to `"approved"`.
+`GET /api/equipment/featured` is public and returns at most six approved
+equipment documents. `GET /api/equipment/:id` requires
+`Authorization: Bearer <JWT>` from an authenticated Better Auth session and
+returns an approved equipment item. Missing, invalid, or expired tokens are
+rejected with HTTP 401. New equipment defaults to `approvalStatus: "pending"`
+and is not included until an administrator or database process changes it to
+`"approved"`.
 
 Each equipment document has `name`, `category`, `location`, `dailyRate`,
 `image`, `description`, and `approvalStatus` fields. `image` should be a URL or

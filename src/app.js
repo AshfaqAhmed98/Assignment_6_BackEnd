@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
 import { toNodeHandler } from "better-auth/node";
-import equipmentRouter from "./routes/equipment.routes.js";
+import { createEquipmentRouter } from "./routes/equipment.routes.js";
 import profilePhotoRouter from "./routes/profile-photo.routes.js";
 
 export function createApp(auth) {
@@ -42,7 +42,7 @@ export function createApp(auth) {
     });
   });
 
-  app.use("/api/equipment", equipmentRouter);
+  app.use("/api/equipment", createEquipmentRouter(auth));
   app.use("/api/uploads", profilePhotoRouter);
 
   app.use((_request, response) => {

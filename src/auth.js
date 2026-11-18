@@ -2,6 +2,7 @@ import { dash } from "@better-auth/infra";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { betterAuth } from "better-auth";
+import { jwt } from "better-auth/plugins";
 import mongoose from "mongoose";
 
 const validateSignUp = createAuthMiddleware(async (context) => {
@@ -68,23 +69,71 @@ export function createAuth() {
     throw new Error("BETTER_AUTH_API_KEY must be set to enable Better Auth Dash.");
   }
 
+  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+
+  if (Boolean(googleClientId) !== Boolean(googleClientSecret)) {
+    throw new Error(
+      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must both be set to enable Google sign-in.",
+    );
+  }
+
+  const baseURL =
+    process.env.BETTER_AUTH_URL ||
+    `http://localhost:${process.env.PORT || 5000}`;
+  const secureCookies = new URL(baseURL).protocol === "https:";
   const client = mongoose.connection.getClient();
   const database = client.db();
 
   return betterAuth({
     database: mongodbAdapter(database, { client, transaction: false }),
     secret,
-    baseURL:
-      process.env.BETTER_AUTH_URL ||
-      `http://localhost:${process.env.PORT || 5000}`,
+    baseURL,
     trustedOrigins: [process.env.FRONTEND_URL || "http://localhost:3000"],
+    advanced: {
+      defaultCookieAttributes: {
+        sameSite: secureCookies ? "none" : "lax",
+        secure: secureCookies,
+      },
+    },
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          required: true,
+          defaultValue: "Customer",
+          input: false,
+        },
+      },
+    },
+    socialProviders:
+      googleClientId && googleClientSecret
+        ? {
+            google: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+            },
+          }
+        : undefined,
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
       minPasswordLength: 6,
       maxPasswordLength: 128,
     },
-    plugins: [dash({ apiKey: infraApiKey })],
+    plugins: [
+      dash({ apiKey: infraApiKey }),
+      jwt({
+        jwt: {
+          issuer: baseURL,
+          audience: "gearrent-api",
+          expirationTime: "15m",
+          definePayload: ({ user }) => ({
+            role: user.role ?? "Customer",
+          }),
+        },
+      }),
+    ],
     hooks: {
       before: validateSignUp,
     },
