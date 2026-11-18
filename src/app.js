@@ -1,7 +1,9 @@
 import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
+import authRouter from "./routes/auth.routes.js";
 import equipmentRouter from "./routes/equipment.routes.js";
+import profilePhotoRouter from "./routes/profile-photo.routes.js";
 
 export function createApp() {
   const app = express();
@@ -30,6 +32,8 @@ export function createApp() {
   });
 
   app.use("/api/equipment", equipmentRouter);
+  app.use("/api/auth", authRouter);
+  app.use("/api/uploads", profilePhotoRouter);
 
   app.use((_request, response) => {
     response.status(404).json({

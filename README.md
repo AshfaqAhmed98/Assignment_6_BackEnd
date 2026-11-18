@@ -35,3 +35,19 @@ Example document to add in the `equipments` collection:
   "approvalStatus": "approved"
 }
 ```
+
+## Registration and profile photos
+
+Set `IMGBB_API_KEY` in `.env` to enable profile photo uploads. Get a key from
+the [ImgBB API page](https://api.imgbb.com/). Keep the key in the backend
+environment; do not add it to a `NEXT_PUBLIC_` variable.
+
+`POST /api/uploads/profile-photo` accepts one `image` file as
+`multipart/form-data`, checks its image type and a 5 MB size limit, then returns
+the ImgBB URL. This public pre-registration endpoint is rate-limited.
+
+`POST /api/auth/register` accepts `name`, `email`, `photo`, and `password`.
+Passwords must contain at least six characters, including uppercase and
+lowercase letters, and are stored as bcrypt hashes. Emails are normalized to
+lowercase and must be unique. Registration creates the account but does not
+start a login session.
