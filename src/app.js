@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import mongoose from "mongoose";
+import equipmentRouter from "./routes/equipment.routes.js";
 
 export function createApp() {
   const app = express();
@@ -23,8 +25,11 @@ export function createApp() {
   app.get("/api/health", (_request, response) => {
     response.json({
       status: "ok",
+      database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     });
   });
+
+  app.use("/api/equipment", equipmentRouter);
 
   app.use((_request, response) => {
     response.status(404).json({
