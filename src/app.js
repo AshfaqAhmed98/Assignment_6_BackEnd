@@ -1,11 +1,11 @@
 import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
-import authRouter from "./routes/auth.routes.js";
+import { toNodeHandler } from "better-auth/node";
 import equipmentRouter from "./routes/equipment.routes.js";
 import profilePhotoRouter from "./routes/profile-photo.routes.js";
 
-export function createApp() {
+export function createApp(auth) {
   const app = express();
 
   app.use(
@@ -14,6 +14,17 @@ export function createApp() {
       credentials: true,
     }),
   );
+
+  if (auth) {
+    app.all("/api/auth/*splat", toNodeHandler(auth));
+  } else {
+    app.all("/api/auth/*splat", (_request, response) => {
+      response.status(503).json({
+        message: "Authentication is temporarily unavailable.",
+      });
+    });
+  }
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -32,7 +43,6 @@ export function createApp() {
   });
 
   app.use("/api/equipment", equipmentRouter);
-  app.use("/api/auth", authRouter);
   app.use("/api/uploads", profilePhotoRouter);
 
   app.use((_request, response) => {
