@@ -2,6 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { requireJwt } from "../middleware/require-jwt.js";
 import { requirePermission } from "../middleware/permissions.js";
+import { Booking } from "../models/booking.model.js";
 import { BookingReservation } from "../models/booking-reservation.model.js";
 import { Equipment } from "../models/equipment.model.js";
 import {
@@ -14,6 +15,7 @@ import {
   getUtcStartOfDay,
   parseRentalDateRange,
 } from "../services/rental-pricing.js";
+import { getBookingStatus } from "../services/booking-status.js";
 
 const checkoutHoldMilliseconds = 35 * 60 * 1000;
 const requestIdPattern =
@@ -104,6 +106,43 @@ export function createBookingsRouter(auth, stripe) {
   const router = Router();
   const authenticate = requireJwt(auth);
   const createBooking = requirePermission("booking:create");
+  const readOwnBookings = requirePermission("booking:read-own");
+
+  router.get("/", authenticate, readOwnBookings, async (request, response) => {
+    if (!isAvailable(response)) {
+      return;
+    }
+
+    const bookings = await Booking.find({ customerId: request.auth.userId })
+      .sort({ createdAt: -1 })
+      .lean();
+    const equipmentIds = bookings.map((booking) => booking.equipmentId);
+    const equipment = await Equipment.find({ _id: { $in: equipmentIds } })
+      .select("name")
+      .lean();
+    const equipmentNames = new Map(
+      equipment.map((item) => [item._id.toString(), item.name]),
+    );
+
+    return response.json({
+      items: bookings.map((booking) => ({
+        id: booking._id.toString(),
+        equipmentName:
+          equipmentNames.get(booking.equipmentId.toString()) ??
+          "Equipment no longer available",
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        bookingDate: booking.createdAt,
+        amountMinor: booking.amountMinor,
+        currency: "bdt",
+        paymentStatus: booking.paymentStatus,
+        bookingStatus: getBookingStatus(
+          booking.startDate,
+          booking.endDate,
+        ),
+      })),
+    });
+  });
 
   router.post(
     "/checkout",

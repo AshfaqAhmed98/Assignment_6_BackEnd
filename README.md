@@ -59,6 +59,12 @@ not expose an admin-promotion endpoint or credential in the frontend. The
 role is included in newly issued JWTs, so have a promoted user sign in again
 to obtain a token with the updated role.
 
+`POST /api/auth/update-user` supports self-service updates to `name`, `image`,
+`phoneNumber`, and `address`. Phone numbers are optional and must use a
+supported international phone format; addresses are limited to 500 characters.
+Email changes are not enabled because this app does not yet have an email
+verification provider. Account roles cannot be changed through this endpoint.
+
 Google sign-in is enabled when both `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` are set. In Google Cloud Console, add
 `<BETTER_AUTH_URL>/api/auth/callback/google` as an authorized redirect URI.
@@ -101,7 +107,26 @@ HTTP 403.
 Every owner mutation is scoped to the JWT subject stored as `ownerId`; changing
 an item ID cannot grant access to another owner's listing. New equipment
 defaults to `approvalStatus: "pending"` and is not shown in public results
-until an Admin approves it. Customer booking management is not implemented yet.
+until an Admin approves it.
+
+## Customer dashboard APIs
+
+The customer dashboard uses the authenticated JWT subject to scope private
+records to the current account:
+
+| Endpoint | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/bookings` | Customer | List the signed-in customer's paid bookings |
+| `POST /api/bookings/checkout` | Customer | Reserve equipment and start Stripe Checkout |
+| `GET /api/favorites` | Customer | List the signed-in customer's saved equipment |
+| `GET /api/favorites/:equipmentId` | Customer | Check whether an item is saved |
+| `POST /api/favorites/:equipmentId` | Customer | Save an approved item |
+| `DELETE /api/favorites/:equipmentId` | Customer | Remove a saved item |
+
+Booking rows are created only after a verified Stripe payment. Their booking
+status is derived from the rental dates: `upcoming`, `ongoing`, or `completed`.
+The end date is exclusive, so a booking is completed at the start of its return
+date. Favorites and booking queries never accept a customer ID from the caller.
 
 Each equipment document has `name`, `category`, `location`, `dailyRate`,
 `image`, `description`, `approvalStatus`, and (for owner-created listings)

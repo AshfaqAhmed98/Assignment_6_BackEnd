@@ -17,6 +17,56 @@ export function isRoleInputAllowed(path, role) {
   return true;
 }
 
+export function getProfileInputError(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return "Provide valid profile information.";
+  }
+
+  if (
+    body.name !== undefined &&
+    (typeof body.name !== "string" ||
+      body.name.trim().length === 0 ||
+      body.name.trim().length > 80)
+  ) {
+    return "Enter a name between 1 and 80 characters.";
+  }
+
+  if (
+    body.phoneNumber !== undefined &&
+    (typeof body.phoneNumber !== "string" ||
+      (body.phoneNumber.trim() !== "" &&
+        !/^[+0-9()\-\s]{7,30}$/.test(body.phoneNumber.trim())))
+  ) {
+    return "Enter a valid phone number.";
+  }
+
+  if (
+    body.address !== undefined &&
+    (typeof body.address !== "string" || body.address.trim().length > 500)
+  ) {
+    return "Address must be 500 characters or fewer.";
+  }
+
+  if (body.image !== undefined && body.image !== null && body.image !== "") {
+    if (typeof body.image !== "string" || body.image.length > 2048) {
+      return "Enter a valid profile photo URL.";
+    }
+
+    let photoUrl;
+    try {
+      photoUrl = new URL(body.image.trim());
+    } catch {
+      return "Enter a valid profile photo URL.";
+    }
+
+    if (!["http:", "https:"].includes(photoUrl.protocol)) {
+      return "Profile photo URL must use HTTP or HTTPS.";
+    }
+  }
+
+  return null;
+}
+
 const validateAuthUserInput = createAuthMiddleware(async (context) => {
   const role = context.body?.role;
   if (!isRoleInputAllowed(context.path, role)) {
@@ -26,6 +76,14 @@ const validateAuthUserInput = createAuthMiddleware(async (context) => {
           ? "Account roles cannot be changed through profile updates."
           : "Choose either a Customer or Owner account. Admin access is assigned by an administrator.",
     });
+  }
+
+  if (context.path === "/update-user") {
+    const profileError = getProfileInputError(context.body);
+    if (profileError) {
+      throw new APIError("BAD_REQUEST", { message: profileError });
+    }
+    return;
   }
 
   if (context.path !== "/sign-up/email") {
@@ -124,6 +182,18 @@ export function createAuth() {
           type: "string",
           required: true,
           defaultValue: "Customer",
+          input: true,
+        },
+        phoneNumber: {
+          type: "string",
+          required: false,
+          defaultValue: "",
+          input: true,
+        },
+        address: {
+          type: "string",
+          required: false,
+          defaultValue: "",
           input: true,
         },
       },
