@@ -2,7 +2,17 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { requireJwt } from "../middleware/require-jwt.js";
 import { requirePermission } from "../middleware/permissions.js";
+import { Booking } from "../models/booking.model.js";
+import { BookingReservation } from "../models/booking-reservation.model.js";
 import { Equipment } from "../models/equipment.model.js";
+import {
+  getAvailableQuantity,
+  withEquipmentReservationLock,
+} from "../services/equipment-availability.js";
+import {
+  getUtcStartOfDay,
+  parseRentalDateRange,
+} from "../services/rental-pricing.js";
 
 const editableFields = new Set([
   "name",
@@ -12,6 +22,8 @@ const editableFields = new Set([
   "image",
   "description",
 ]);
+const creatableFields = new Set([...editableFields, "quantity"]);
+const requiredEquipmentFields = ["name", "category", "location", "dailyRate", "image", "description"];
 
 function parseEquipmentInput(body, { partial = false } = {}) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -19,10 +31,11 @@ function parseEquipmentInput(body, { partial = false } = {}) {
   }
 
   const keys = Object.keys(body);
+  const allowedFields = partial ? editableFields : creatableFields;
   if (
     keys.length === 0 ||
-    keys.some((key) => !editableFields.has(key)) ||
-    (!partial && [...editableFields].some((key) => !(key in body)))
+    keys.some((key) => !allowedFields.has(key)) ||
+    (!partial && requiredEquipmentFields.some((key) => !(key in body)))
   ) {
     return null;
   }
@@ -30,6 +43,13 @@ function parseEquipmentInput(body, { partial = false } = {}) {
   const input = {};
   for (const key of keys) {
     const value = body[key];
+    if (key === "quantity") {
+      if (!Number.isInteger(value) || value < 1 || value > 10000) {
+        return null;
+      }
+      input[key] = value;
+      continue;
+    }
     if (key === "dailyRate") {
       if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
         return null;
@@ -85,9 +105,11 @@ function toEquipmentResponse(item) {
     category: item.category,
     location: item.location,
     dailyRate: item.dailyRate,
+    quantity: item.quantity ?? 1,
     image: item.image,
     description: item.description,
     approvalStatus: item.approvalStatus,
+    ownerName: item.ownerName ?? "",
   };
 }
 
@@ -226,6 +248,7 @@ export function createEquipmentRouter(auth) {
       const item = await Equipment.create({
         ...input,
         ownerId: request.auth.userId,
+        ownerName: request.auth.name ?? "",
         approvalStatus: "pending",
       });
       return response.status(201).json({ item: toEquipmentResponse(item) });
@@ -282,12 +305,106 @@ export function createEquipmentRouter(auth) {
         request.auth.role === "Admin"
           ? { _id: request.params.id }
           : { _id: request.params.id, ownerId: request.auth.userId };
-      const result = await Equipment.deleteOne(filter);
+      const result = await withEquipmentReservationLock(
+        request.params.id,
+        async () => {
+          const now = new Date();
+          const [activeReservation, activeBooking] = await Promise.all([
+            BookingReservation.exists({
+              equipmentId: request.params.id,
+              status: "pending",
+              expiresAt: { $gt: now },
+            }),
+            Booking.exists({
+              equipmentId: request.params.id,
+              paymentStatus: "paid",
+              endDate: { $gt: now },
+            }),
+          ]);
+          if (activeReservation || activeBooking) {
+            return null;
+          }
+          return Equipment.deleteOne(filter);
+        },
+      );
+      if (result === null) {
+        return response.status(409).json({
+          message:
+            "Equipment with an active checkout or paid rental cannot be deleted.",
+        });
+      }
       if (result.deletedCount === 0) {
         return response.status(404).json({ message: "Equipment not found." });
       }
 
       return response.status(204).end();
+    },
+  );
+
+  router.get(
+    "/:id/availability",
+    authenticate,
+    readEquipment,
+    async (request, response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        return response.status(404).json({ message: "Equipment not found." });
+      }
+
+      const requestedQuantity = Number(request.query.quantity);
+      if (
+        !Number.isInteger(requestedQuantity) ||
+        requestedQuantity < 1 ||
+        requestedQuantity > 10000
+      ) {
+        return response.status(400).json({
+          message: "Requested quantity must be a positive whole number.",
+        });
+      }
+
+      let dateRange;
+      try {
+        dateRange = parseRentalDateRange(
+          request.query.startDate,
+          request.query.endDate,
+        );
+      } catch (error) {
+        return response.status(400).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Provide valid rental start and end dates.",
+        });
+      }
+      if (dateRange.startDate < getUtcStartOfDay()) {
+        return response.status(400).json({
+          message: "Rental start date cannot be in the past.",
+        });
+      }
+
+      if (!isAvailable(response)) {
+        return;
+      }
+
+      const equipment = await Equipment.findOne({
+        _id: request.params.id,
+        approvalStatus: "approved",
+      })
+        .select("quantity")
+        .lean();
+      if (!equipment) {
+        return response.status(404).json({ message: "Equipment not found." });
+      }
+
+      const availableQuantity = await getAvailableQuantity({
+        equipmentId: equipment._id,
+        totalQuantity: equipment.quantity ?? 1,
+        ...dateRange,
+      });
+      return response.json({
+        availableQuantity,
+        requestedQuantity,
+        available: availableQuantity >= requestedQuantity,
+      });
     },
   );
 
@@ -305,7 +422,7 @@ export function createEquipmentRouter(auth) {
       _id: request.params.id,
       approvalStatus: "approved",
     })
-      .select("name category location dailyRate image description")
+      .select("name category location dailyRate quantity image description ownerName")
       .lean();
 
     if (!item) {
@@ -313,6 +430,22 @@ export function createEquipmentRouter(auth) {
         message: "Equipment not found.",
       });
     }
+
+    const currentDate = new Date();
+    const startDate = new Date(
+      Date.UTC(
+        currentDate.getUTCFullYear(),
+        currentDate.getUTCMonth(),
+        currentDate.getUTCDate(),
+      ),
+    );
+    const endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+    const availableQuantity = await getAvailableQuantity({
+      equipmentId: item._id,
+      totalQuantity: item.quantity ?? 1,
+      startDate,
+      endDate,
+    });
 
     return response.json({
       item: {
@@ -323,6 +456,9 @@ export function createEquipmentRouter(auth) {
         dailyRate: item.dailyRate,
         image: item.image,
         description: item.description,
+        totalQuantity: item.quantity ?? 1,
+        availableQuantity,
+        ownerName: item.ownerName ?? "",
       },
     });
   });

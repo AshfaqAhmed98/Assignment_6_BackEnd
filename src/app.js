@@ -3,9 +3,16 @@ import express from "express";
 import mongoose from "mongoose";
 import { toNodeHandler } from "better-auth/node";
 import { createEquipmentRouter } from "./routes/equipment.routes.js";
+import { createBookingsRouter } from "./routes/bookings.routes.js";
+import { createFavoritesRouter } from "./routes/favorites.routes.js";
+import {
+  createPaymentsRouter,
+  createStripeWebhookHandler,
+} from "./routes/payments.routes.js";
 import profilePhotoRouter from "./routes/profile-photo.routes.js";
+import { createStripeClient } from "./services/stripe-client.js";
 
-export function createApp(auth) {
+export function createApp(auth, stripe = createStripeClient()) {
   const app = express();
 
   app.use(
@@ -25,6 +32,12 @@ export function createApp(auth) {
     });
   }
 
+  app.post(
+    "/api/payments/stripe/webhook",
+    express.raw({ type: "application/json" }),
+    createStripeWebhookHandler(stripe),
+  );
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -43,6 +56,9 @@ export function createApp(auth) {
   });
 
   app.use("/api/equipment", createEquipmentRouter(auth));
+  app.use("/api/favorites", createFavoritesRouter(auth));
+  app.use("/api/bookings", createBookingsRouter(auth, stripe));
+  app.use("/api/payments", createPaymentsRouter(auth));
   app.use("/api/uploads", profilePhotoRouter);
 
   app.use((_request, response) => {

@@ -42,7 +42,8 @@ development keeps `SameSite=Lax`.
 
 Public email signup accepts `role: "Customer"` or `role: "Owner"`; an omitted
 role defaults to `Customer`. Other values, including `Admin`, are rejected by
-the server. Admin assignment is an operator-only database action. After
+the server. Self-service profile updates cannot change the role. Admin
+assignment is an operator-only database action. After
 verifying the target account and taking the normal database backup, a trusted
 MongoDB operator can promote that account with:
 

@@ -84,7 +84,7 @@ test("passes verified identity to the route", async () => {
         async verifyJWT({ body }) {
           verifiedToken = body.token;
           return {
-            payload: { sub: "user-1", role: "Customer" },
+            payload: { sub: "user-1", role: "Customer", name: "Renter One" },
           };
         },
       },
@@ -97,6 +97,7 @@ test("passes verified identity to the route", async () => {
   assert.deepEqual(result.request.auth, {
     userId: "user-1",
     role: "Customer",
+    name: "Renter One",
   });
 });
 

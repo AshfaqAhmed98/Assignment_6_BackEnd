@@ -22,6 +22,12 @@ const equipmentSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: 1,
+    },
     image: {
       type: String,
       required: true,
@@ -35,6 +41,11 @@ const equipmentSchema = new mongoose.Schema(
     ownerId: {
       type: String,
       index: true,
+    },
+    ownerName: {
+      type: String,
+      trim: true,
+      default: "",
     },
     approvalStatus: {
       type: String,

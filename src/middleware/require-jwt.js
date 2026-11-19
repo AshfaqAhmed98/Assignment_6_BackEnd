@@ -40,6 +40,7 @@ export function requireJwt(auth) {
       request.auth = {
         userId: payload.sub,
         role: typeof payload.role === "string" ? payload.role : undefined,
+        ...(typeof payload.name === "string" ? { name: payload.name } : {}),
       };
 
       return next();

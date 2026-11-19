@@ -152,6 +152,7 @@ export function createAuth() {
           expirationTime: "15m",
           definePayload: ({ user }) => ({
             role: user.role ?? "Customer",
+            name: user.name,
           }),
         },
       }),

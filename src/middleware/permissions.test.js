@@ -51,6 +51,24 @@ test("allows each defined role to read approved equipment", () => {
   }
 });
 
+test("allows only customers to manage favorites and create bookings", () => {
+  assert.equal(
+    invokePermission("favorites:manage-own", "Customer").nextCalled,
+    true,
+  );
+  assert.equal(invokePermission("booking:create", "Customer").nextCalled, true);
+  for (const role of ["Owner", "Admin"]) {
+    assert.equal(
+      invokePermission("favorites:manage-own", role).response.statusCode,
+      403,
+    );
+    assert.equal(
+      invokePermission("booking:create", role).response.statusCode,
+      403,
+    );
+  }
+});
+
 test("denies missing and unknown roles", () => {
   assert.equal(invokePermission("equipment:read", undefined).response.statusCode, 403);
   assert.equal(invokePermission("equipment:read", "Superuser").response.statusCode, 403);
