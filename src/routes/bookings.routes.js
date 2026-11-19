@@ -107,6 +107,7 @@ export function createBookingsRouter(auth, stripe) {
   const authenticate = requireJwt(auth);
   const createBooking = requirePermission("booking:create");
   const readOwnBookings = requirePermission("booking:read-own");
+  const readOwnerBookings = requirePermission("booking:read-own-equipment");
 
   router.get("/", authenticate, readOwnBookings, async (request, response) => {
     if (!isAvailable(response)) {
@@ -143,6 +144,104 @@ export function createBookingsRouter(auth, stripe) {
       })),
     });
   });
+
+  router.get(
+    "/owner",
+    authenticate,
+    readOwnerBookings,
+    async (request, response) => {
+      if (!isAvailable(response)) {
+        return;
+      }
+
+      const equipment = await Equipment.find({
+        ownerId: request.auth.userId,
+      })
+        .select("name category")
+        .lean();
+      if (equipment.length === 0) {
+        return response.json({ items: [] });
+      }
+
+      const equipmentById = new Map(
+        equipment.map((item) => [
+          item._id.toString(),
+          {
+            id: item._id.toString(),
+            name: item.name,
+            category: item.category,
+          },
+        ]),
+      );
+      const equipmentIds = equipment.map((item) => item._id);
+      const now = new Date();
+      const [bookings, reservations] = await Promise.all([
+        Booking.find({ equipmentId: { $in: equipmentIds } })
+          .sort({ createdAt: -1 })
+          .lean(),
+        BookingReservation.find({
+          equipmentId: { $in: equipmentIds },
+          status: "pending",
+          expiresAt: { $gt: now },
+        })
+          .sort({ createdAt: -1 })
+          .lean(),
+      ]);
+
+      const toOwnerRental = (rental, paymentStatus, bookingStatus) => {
+        const equipmentId = rental.equipmentId.toString();
+        const rentalEquipment = equipmentById.get(equipmentId);
+        const durationDays = Math.max(
+          1,
+          Math.ceil(
+            (new Date(rental.endDate).getTime() -
+              new Date(rental.startDate).getTime()) /
+              (24 * 60 * 60 * 1000),
+          ),
+        );
+
+        return {
+          id: rental._id.toString(),
+          customer: {
+            name: rental.customerName || "Customer",
+            email: rental.customerEmail || "",
+            phoneNumber: rental.contactNumber,
+            address: rental.deliveryAddress,
+          },
+          equipment: rentalEquipment,
+          startDate: rental.startDate,
+          endDate: rental.endDate,
+          durationDays,
+          rentalType: rental.rentalType,
+          quantity: rental.quantity,
+          amountMinor: rental.amountMinor,
+          currency: "bdt",
+          paymentStatus,
+          bookingStatus,
+          bookingDate: rental.createdAt,
+        };
+      };
+
+      const items = [
+        ...bookings.map((booking) =>
+          toOwnerRental(
+            booking,
+            booking.paymentStatus,
+            getBookingStatus(booking.startDate, booking.endDate),
+          ),
+        ),
+        ...reservations.map((reservation) =>
+          toOwnerRental(reservation, "pending", "pending-payment"),
+        ),
+      ].sort(
+        (first, second) =>
+          new Date(second.bookingDate).getTime() -
+          new Date(first.bookingDate).getTime(),
+      );
+
+      return response.json({ items });
+    },
+  );
 
   router.post(
     "/checkout",
@@ -192,7 +291,7 @@ export function createBookingsRouter(auth, stripe) {
         _id: input.equipmentId,
         approvalStatus: "approved",
       })
-        .select("name dailyRate quantity")
+        .select("name dailyRate rentalPrice rentalType quantity")
         .lean();
       if (!equipment) {
         return response.status(404).json({ message: "Equipment not found." });
@@ -205,6 +304,8 @@ export function createBookingsRouter(auth, stripe) {
           rentalType: input.rentalType,
           durationDays: input.durationDays,
           quantity: input.requiredQuantity,
+          rentalPrice: equipment.rentalPrice,
+          equipmentRentalType: equipment.rentalType,
         });
       } catch {
         return response.status(400).json({
@@ -232,6 +333,8 @@ export function createBookingsRouter(auth, stripe) {
 
             return BookingReservation.create({
               customerId: request.auth.userId,
+              customerName: request.auth.name ?? "",
+              customerEmail: request.auth.email ?? "",
               equipmentId: equipment._id,
               requestId: input.requestId,
               startDate: input.startDate,

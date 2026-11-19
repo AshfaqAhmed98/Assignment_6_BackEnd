@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { parseEquipmentInput } from "./equipment.routes.js";
+
+const equipmentInput = {
+  name: "Jobsite generator",
+  category: "Power",
+  location: "Dhaka",
+  rentalPrice: 1000,
+  rentalType: "weekly",
+  quantity: 2,
+  image: "https://images.example.com/generator.jpg",
+  description: "Portable generator for a worksite.",
+  condition: "Good",
+  brand: "GearRent",
+  model: "GR-100",
+  rentalTerms: "Return with a full fuel tank.",
+};
+
+test("normalizes the selected equipment rental rate for the booking engine", () => {
+  assert.deepEqual(parseEquipmentInput(equipmentInput), {
+    ...equipmentInput,
+    rentalPrice: 1000,
+    rentalType: "weekly",
+    dailyRate: 142.86,
+  });
+});
+
+test("keeps legacy daily-rate equipment requests valid", () => {
+  const input = {
+    name: "Legacy listing",
+    category: "Power",
+    location: "Dhaka",
+    dailyRate: 100,
+    image: "https://images.example.com/equipment.jpg",
+    description: "An existing API client.",
+  };
+
+  assert.deepEqual(parseEquipmentInput(input), {
+    ...input,
+    rentalPrice: 100,
+    rentalType: "daily",
+    dailyRate: 100,
+  });
+});
+
+test("rejects mismatched pricing fields and owner-controlled status data", () => {
+  assert.equal(
+    parseEquipmentInput({
+      ...equipmentInput,
+      rentalType: undefined,
+    }),
+    null,
+  );
+  assert.equal(
+    parseEquipmentInput({
+      ...equipmentInput,
+      approvalStatus: "approved",
+    }),
+    null,
+  );
+  assert.equal(
+    parseEquipmentInput({
+      ...equipmentInput,
+      condition: "Unknown",
+    }),
+    null,
+  );
+});

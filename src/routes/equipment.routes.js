@@ -24,13 +24,49 @@ const editableFields = new Set([
   "category",
   "location",
   "dailyRate",
+  "rentalPrice",
+  "rentalType",
   "image",
   "description",
+  "condition",
+  "brand",
+  "model",
+  "rentalTerms",
 ]);
 const creatableFields = new Set([...editableFields, "quantity"]);
-const requiredEquipmentFields = ["name", "category", "location", "dailyRate", "image", "description"];
+const requiredEquipmentFields = [
+  "name",
+  "category",
+  "location",
+  "image",
+  "description",
+];
+const rentalPeriodDays = Object.freeze({
+  daily: 1,
+  weekly: 7,
+  monthly: 30,
+});
+const rentalTypes = new Set(Object.keys(rentalPeriodDays));
+const equipmentConditions = new Set(["New", "Excellent", "Good", "Fair"]);
 
-function parseEquipmentInput(body, { partial = false } = {}) {
+function normalizeRentalRate(price, rentalType) {
+  const priceMinor = Math.round(price * 100);
+  if (!Number.isSafeInteger(priceMinor) || priceMinor < 1) {
+    return null;
+  }
+
+  const dailyRateMinor = Math.max(
+    1,
+    Math.round(priceMinor / rentalPeriodDays[rentalType]),
+  );
+  return {
+    rentalPrice: priceMinor / 100,
+    rentalType,
+    dailyRate: dailyRateMinor / 100,
+  };
+}
+
+export function parseEquipmentInput(body, { partial = false } = {}) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return null;
   }
@@ -40,12 +76,29 @@ function parseEquipmentInput(body, { partial = false } = {}) {
   if (
     keys.length === 0 ||
     keys.some((key) => !allowedFields.has(key)) ||
-    (!partial && requiredEquipmentFields.some((key) => !(key in body)))
+    (!partial &&
+      (requiredEquipmentFields.some((key) => !(key in body)) ||
+        (!("dailyRate" in body) &&
+          !("rentalPrice" in body) &&
+          !("rentalType" in body))))
   ) {
     return null;
   }
 
   const input = {};
+  const limits = {
+    name: 120,
+    category: 80,
+    location: 120,
+    image: 2048,
+    description: 2000,
+    condition: 40,
+    brand: 80,
+    model: 80,
+    rentalTerms: 3000,
+  };
+  const optionalTextFields = new Set(["brand", "model"]);
+
   for (const key of keys) {
     const value = body[key];
     if (key === "quantity") {
@@ -56,28 +109,71 @@ function parseEquipmentInput(body, { partial = false } = {}) {
       continue;
     }
     if (key === "dailyRate") {
-      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value <= 0 ||
+        value > 100000000 ||
+        !Number.isSafeInteger(Math.round(value * 100))
+      ) {
         return null;
       }
       input[key] = value;
       continue;
     }
-
-    const limits = {
-      name: 120,
-      category: 80,
-      location: 120,
-      image: 2048,
-      description: 2000,
-    };
+    if (key === "rentalPrice") {
+      if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value <= 0 ||
+        value > 100000000
+      ) {
+        return null;
+      }
+      input[key] = value;
+      continue;
+    }
+    if (key === "rentalType") {
+      if (typeof value !== "string" || !rentalTypes.has(value)) {
+        return null;
+      }
+      input[key] = value;
+      continue;
+    }
+    if (key === "condition" && !equipmentConditions.has(value)) {
+      return null;
+    }
     if (
       typeof value !== "string" ||
-      value.trim().length === 0 ||
+      (!optionalTextFields.has(key) && value.trim().length === 0) ||
       value.trim().length > limits[key]
     ) {
       return null;
     }
     input[key] = value.trim();
+  }
+
+  if (
+    ("rentalPrice" in input) !== ("rentalType" in input) ||
+    ("dailyRate" in input &&
+      ("rentalPrice" in input || "rentalType" in input))
+  ) {
+    return null;
+  }
+
+  if ("rentalPrice" in input && "rentalType" in input) {
+    const normalizedRate = normalizeRentalRate(
+      input.rentalPrice,
+      input.rentalType,
+    );
+    if (!normalizedRate) {
+      return null;
+    }
+    Object.assign(input, normalizedRate);
+  } else if ("dailyRate" in input) {
+    input.dailyRate = Math.round(input.dailyRate * 100) / 100;
+    input.rentalPrice = input.dailyRate;
+    input.rentalType = "daily";
   }
 
   if (input.image) {
@@ -110,9 +206,15 @@ function toEquipmentResponse(item) {
     category: item.category,
     location: item.location,
     dailyRate: item.dailyRate,
+    rentalPrice: item.rentalPrice ?? item.dailyRate,
+    rentalType: item.rentalType ?? "daily",
     quantity: item.quantity ?? 1,
     image: item.image,
     description: item.description,
+    condition: item.condition ?? "",
+    brand: item.brand ?? "",
+    model: item.model ?? "",
+    rentalTerms: item.rentalTerms ?? "",
     approvalStatus: item.approvalStatus,
     ownerName: item.ownerName ?? "",
   };
@@ -132,7 +234,7 @@ function isAvailable(response) {
 function invalidEquipment(response) {
   return response.status(400).json({
     message:
-      "Provide a name, category, location, positive daily rate, image URL or path, and description within the field limits.",
+      "Provide valid equipment details, a positive rental price, a supported rental type, quantity, condition, image URL, and rental terms.",
   });
 }
 
@@ -163,7 +265,7 @@ export function createEquipmentRouter(auth) {
 
     const equipment = await Equipment.find({ approvalStatus: "approved" })
       .select(
-        "name category location dailyRate quantity image description createdAt",
+        "name category location dailyRate rentalPrice rentalType quantity image description createdAt",
       )
       .lean();
     const categories = [
@@ -232,6 +334,31 @@ export function createEquipmentRouter(auth) {
         .sort({ createdAt: -1 })
         .lean();
       return response.json({ items: equipment.map(toEquipmentResponse) });
+    },
+  );
+
+  router.get(
+    "/mine/:id",
+    authenticate,
+    manageEquipment,
+    async (request, response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        return response.status(404).json({ message: "Equipment not found." });
+      }
+      if (!isAvailable(response)) {
+        return;
+      }
+
+      const filter =
+        request.auth.role === "Admin"
+          ? { _id: request.params.id }
+          : { _id: request.params.id, ownerId: request.auth.userId };
+      const item = await Equipment.findOne(filter).lean();
+      if (!item) {
+        return response.status(404).json({ message: "Equipment not found." });
+      }
+
+      return response.json({ item: toEquipmentResponse(item) });
     },
   );
 
@@ -474,7 +601,9 @@ export function createEquipmentRouter(auth) {
       _id: request.params.id,
       approvalStatus: "approved",
     })
-      .select("name category location dailyRate quantity image description ownerName")
+      .select(
+        "name category location dailyRate rentalPrice rentalType quantity image description condition brand model rentalTerms ownerName",
+      )
       .lean();
 
     if (!item) {
@@ -506,8 +635,14 @@ export function createEquipmentRouter(auth) {
         category: item.category,
         location: item.location,
         dailyRate: item.dailyRate,
+        rentalPrice: item.rentalPrice ?? item.dailyRate,
+        rentalType: item.rentalType ?? "daily",
         image: item.image,
         description: item.description,
+        condition: item.condition ?? "",
+        brand: item.brand ?? "",
+        model: item.model ?? "",
+        rentalTerms: item.rentalTerms ?? "",
         totalQuantity: item.quantity ?? 1,
         availableQuantity,
         ownerName: item.ownerName ?? "",

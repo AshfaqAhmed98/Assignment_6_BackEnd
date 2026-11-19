@@ -53,6 +53,31 @@ test("rounds weekly and monthly rentals up to whole periods", () => {
   );
 });
 
+test("uses the owner's exact selected-period price and derives other rates", () => {
+  assert.equal(
+    calculateRentalPrice({
+      dailyRate: 142.86,
+      rentalType: "weekly",
+      durationDays: 7,
+      quantity: 1,
+      rentalPrice: 1000,
+      equipmentRentalType: "weekly",
+    }).amountMinor,
+    100000,
+  );
+  assert.equal(
+    calculateRentalPrice({
+      dailyRate: 142.86,
+      rentalType: "daily",
+      durationDays: 1,
+      quantity: 1,
+      rentalPrice: 1000,
+      equipmentRentalType: "weekly",
+    }).amountMinor,
+    14286,
+  );
+});
+
 test("subtracts overlapping reservations from total equipment quantity", () => {
   assert.equal(countAvailableQuantity(5, [1, 2]), 2);
   assert.equal(countAvailableQuantity(1, [1, 1]), 0);

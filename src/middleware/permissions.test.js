@@ -74,6 +74,18 @@ test("allows only customers to manage favorites and bookings", () => {
   }
 });
 
+test("allows only owners to read rentals of their equipment", () => {
+  assert.equal(
+    invokePermission("booking:read-own-equipment", "Owner").nextCalled,
+    true,
+  );
+  for (const role of ["Customer", "Admin"]) {
+    const result = invokePermission("booking:read-own-equipment", role);
+    assert.equal(result.response.statusCode, 403);
+    assert.equal(result.nextCalled, false);
+  }
+});
+
 test("denies missing and unknown roles", () => {
   assert.equal(invokePermission("equipment:read", undefined).response.statusCode, 403);
   assert.equal(invokePermission("equipment:read", "Superuser").response.statusCode, 403);

@@ -43,6 +43,8 @@ async function fulfillCheckoutSession(session, eventId) {
       $setOnInsert: {
         reservationId: reservation._id,
         customerId: reservation.customerId,
+        customerName: reservation.customerName ?? "",
+        customerEmail: reservation.customerEmail ?? "",
         equipmentId: reservation.equipmentId,
         startDate: reservation.startDate,
         endDate: reservation.endDate,

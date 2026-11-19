@@ -8,6 +8,7 @@ const permissionRoles = Object.freeze({
   "favorites:manage-own": ["Customer"],
   "booking:create": ["Customer"],
   "booking:read-own": ["Customer"],
+  "booking:read-own-equipment": ["Owner"],
 });
 
 export function requirePermission(permission) {

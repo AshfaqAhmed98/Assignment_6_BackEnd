@@ -107,7 +107,12 @@ export function createEquipmentListing({
         category: item.category,
         location: item.location,
         dailyRate: item.dailyRate,
-        rentalRate: item.dailyRate * multiplier,
+        rentalRate:
+          item.rentalType === options.rentalType &&
+          Number.isFinite(item.rentalPrice) &&
+          item.rentalPrice > 0
+            ? item.rentalPrice
+            : item.dailyRate * multiplier,
         rentalType: options.rentalType,
         image: item.image,
         description: item.description,

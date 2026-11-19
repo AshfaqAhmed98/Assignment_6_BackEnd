@@ -13,6 +13,16 @@ const bookingSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    customerName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    customerEmail: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     equipmentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Equipment",

@@ -223,6 +223,7 @@ export function createAuth() {
           definePayload: ({ user }) => ({
             role: user.role ?? "Customer",
             name: user.name,
+            email: user.email,
           }),
         },
       }),

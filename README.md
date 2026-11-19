@@ -98,16 +98,21 @@ HTTP 403.
 | `GET /api/equipment/featured` | Public | Browse approved equipment |
 | `GET /api/equipment/:id` | Customer, Owner, Admin | Read an approved item |
 | `GET /api/equipment/mine` | Owner, Admin | List owned items (Admin sees all) |
+| `GET /api/equipment/mine/:id` | Owner of item, Admin | Read a managed listing, including pending items |
 | `POST /api/equipment` | Owner, Admin | Create a pending listing |
 | `PATCH /api/equipment/:id` | Owner of item, Admin | Edit a listing; it returns to pending review |
 | `DELETE /api/equipment/:id` | Owner of item, Admin | Delete a listing |
+| `POST /api/uploads/equipment-photo` | Owner, Admin | Validate and upload one equipment image to ImgBB |
 | `GET /api/equipment/admin/pending` | Admin | List pending submissions |
 | `PATCH /api/equipment/admin/:id/approval` | Admin | Set `approvalStatus` to `approved` or `rejected` |
 
 Every owner mutation is scoped to the JWT subject stored as `ownerId`; changing
 an item ID cannot grant access to another owner's listing. New equipment
 defaults to `approvalStatus: "pending"` and is not shown in public results
-until an Admin approves it.
+until an Admin approves it. The selected `rentalType` and `rentalPrice` are
+stored together. That period uses the exact entered price; other rental periods
+are derived from its daily equivalent. Legacy listings without those fields
+continue to use `dailyRate`.
 
 ## Customer dashboard APIs
 
@@ -128,10 +133,24 @@ status is derived from the rental dates: `upcoming`, `ongoing`, or `completed`.
 The end date is exclusive, so a booking is completed at the start of its return
 date. Favorites and booking queries never accept a customer ID from the caller.
 
+## Owner dashboard APIs
+
+The owner dashboard scopes equipment and rental records to the signed-in owner:
+
+| Endpoint | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/bookings/owner` | Owner | List paid rentals and active checkout reservations for owned equipment |
+
+Rental rows include a customer name/email snapshot from the checkout token and
+the phone number and delivery address provided for that booking. Pending
+reservations appear only while their checkout hold is active.
+
 Each equipment document has `name`, `category`, `location`, `dailyRate`,
-`image`, `description`, `approvalStatus`, and (for owner-created listings)
-`ownerId`. `image` should be an HTTP(S) URL or a root-relative path usable by
-the frontend.
+`rentalPrice`, `rentalType`, `quantity`, `condition`, `brand`, `model`,
+`rentalTerms`, `image`, `description`, `approvalStatus`, and (for
+owner-created listings) `ownerId`. `dailyRate` is the derived daily equivalent
+used by the booking engine. Owner image uploads return an ImgBB HTTPS URL;
+legacy records may use a root-relative path.
 
 Example document to add in the `equipments` collection:
 
@@ -140,9 +159,16 @@ Example document to add in the `equipments` collection:
   "name": "Professional Drill Kit",
   "category": "Power tools",
   "location": "Dhaka",
-  "dailyRate": 850,
+  "dailyRate": 121.43,
+  "rentalPrice": 850,
+  "rentalType": "weekly",
+  "quantity": 2,
   "image": "/images/tools-rental-banner.jpg",
   "description": "A drill kit for everyday building and repair work.",
+  "condition": "Good",
+  "brand": "GearRent",
+  "model": "GR-100",
+  "rentalTerms": "Return the kit clean and in its case.",
   "approvalStatus": "approved"
 }
 ```
@@ -156,3 +182,6 @@ environment; do not add it to a `NEXT_PUBLIC_` variable.
 `POST /api/uploads/profile-photo` accepts one `image` file as
 `multipart/form-data`, checks its image type and a 5 MB size limit, then returns
 the ImgBB URL. This public pre-registration endpoint is rate-limited.
+`POST /api/uploads/equipment-photo` uses the same checks and rate limit, and
+requires an Owner or Admin JWT. Keep the ImgBB key on the backend; do not add it
+to a `NEXT_PUBLIC_` variable.

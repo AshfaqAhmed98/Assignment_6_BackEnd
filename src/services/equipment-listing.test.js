@@ -87,6 +87,24 @@ test("filters and sorts using the selected rental rate and today's availability"
   );
 });
 
+test("uses an owner's exact selected-period price in equipment results", () => {
+  const equipment = [
+    equipmentItem("1", {
+      dailyRate: 142.86,
+      rentalPrice: 1000,
+      rentalType: "weekly",
+    }),
+  ];
+  const options = parseEquipmentListingQuery({ rentalType: "weekly" });
+  const availableQuantities = new Map([["1", 1]]);
+
+  assert.equal(
+    createEquipmentListing({ equipment, availableQuantities, options })[0]
+      .rentalRate,
+    1000,
+  );
+});
+
 test("sorts recent listings newest-first and includes availability counts", () => {
   const equipment = [
     equipmentItem("1", { createdAt: new Date("2026-01-01T00:00:00.000Z") }),

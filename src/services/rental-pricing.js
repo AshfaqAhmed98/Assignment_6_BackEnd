@@ -49,6 +49,8 @@ export function calculateRentalPrice({
   rentalType,
   durationDays,
   quantity,
+  rentalPrice,
+  equipmentRentalType,
 }) {
   const periodDays = rentalPeriods[rentalType];
   if (
@@ -64,7 +66,13 @@ export function calculateRentalPrice({
   }
 
   const billedUnits = Math.ceil(durationDays / periodDays);
-  const unitAmountMinor = Math.round(dailyRate * 100) * periodDays;
+  const usesExactPeriodRate =
+    rentalType === equipmentRentalType &&
+    Number.isFinite(rentalPrice) &&
+    rentalPrice > 0;
+  const unitAmountMinor = usesExactPeriodRate
+    ? Math.round(rentalPrice * 100)
+    : Math.round(dailyRate * 100) * periodDays;
   const amountMinor = unitAmountMinor * billedUnits * quantity;
 
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) {

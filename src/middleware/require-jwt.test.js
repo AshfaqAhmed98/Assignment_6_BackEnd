@@ -84,7 +84,12 @@ test("passes verified identity to the route", async () => {
         async verifyJWT({ body }) {
           verifiedToken = body.token;
           return {
-            payload: { sub: "user-1", role: "Customer", name: "Renter One" },
+            payload: {
+              sub: "user-1",
+              role: "Customer",
+              name: "Renter One",
+              email: "renter@example.com",
+            },
           };
         },
       },
@@ -98,6 +103,7 @@ test("passes verified identity to the route", async () => {
     userId: "user-1",
     role: "Customer",
     name: "Renter One",
+    email: "renter@example.com",
   });
 });
 
