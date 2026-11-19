@@ -6,9 +6,14 @@ import { Booking } from "../models/booking.model.js";
 import { BookingReservation } from "../models/booking-reservation.model.js";
 import { Equipment } from "../models/equipment.model.js";
 import {
+  getAvailableQuantities,
   getAvailableQuantity,
   withEquipmentReservationLock,
 } from "../services/equipment-availability.js";
+import {
+  createEquipmentListing,
+  parseEquipmentListingQuery,
+} from "../services/equipment-listing.js";
 import {
   getUtcStartOfDay,
   parseRentalDateRange,
@@ -138,6 +143,53 @@ export function createEquipmentRouter(auth) {
   const manageEquipment = requirePermission("equipment:manage-own");
   const createEquipment = requirePermission("equipment:create");
   const approveEquipment = requirePermission("equipment:approve");
+
+  router.get("/", async (request, response) => {
+    let options;
+    try {
+      options = parseEquipmentListingQuery(request.query);
+    } catch (error) {
+      return response.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Provide valid equipment filters.",
+      });
+    }
+
+    if (!isAvailable(response)) {
+      return;
+    }
+
+    const equipment = await Equipment.find({ approvalStatus: "approved" })
+      .select(
+        "name category location dailyRate quantity image description createdAt",
+      )
+      .lean();
+    const categories = [
+      ...new Set(equipment.map((item) => item.category)),
+    ].sort((left, right) => left.localeCompare(right));
+    const currentDate = new Date();
+    const startDate = new Date(
+      Date.UTC(
+        currentDate.getUTCFullYear(),
+        currentDate.getUTCMonth(),
+        currentDate.getUTCDate(),
+      ),
+    );
+    const availableQuantities = await getAvailableQuantities({
+      equipment,
+      startDate,
+      endDate: new Date(startDate.getTime() + 24 * 60 * 60 * 1000),
+    });
+    const items = createEquipmentListing({
+      equipment,
+      availableQuantities,
+      options,
+    });
+
+    return response.json({ items, categories, total: items.length });
+  });
 
   router.get("/featured", async (_request, response) => {
     if (!isAvailable(response)) {

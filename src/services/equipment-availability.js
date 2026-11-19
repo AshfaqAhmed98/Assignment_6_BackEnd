@@ -11,6 +11,65 @@ export class EquipmentReservationLockError extends Error {
   }
 }
 
+export function calculateAvailableQuantities(
+  equipment,
+  reservations,
+  bookings,
+) {
+  const occupiedByEquipment = new Map();
+
+  for (const rental of [...reservations, ...bookings]) {
+    const equipmentId = String(rental.equipmentId);
+    occupiedByEquipment.set(
+      equipmentId,
+      (occupiedByEquipment.get(equipmentId) ?? 0) + rental.quantity,
+    );
+  }
+
+  return new Map(
+    equipment.map((item) => {
+      const equipmentId = item._id.toString();
+      const totalQuantity = item.quantity ?? 1;
+      const occupiedQuantity = occupiedByEquipment.get(equipmentId) ?? 0;
+      return [
+        equipmentId,
+        Math.max(0, totalQuantity - occupiedQuantity),
+      ];
+    }),
+  );
+}
+
+export async function getAvailableQuantities({
+  equipment,
+  startDate,
+  endDate,
+  now = new Date(),
+}) {
+  if (equipment.length === 0) {
+    return new Map();
+  }
+
+  const overlap = {
+    equipmentId: { $in: equipment.map((item) => item._id) },
+    startDate: { $lt: endDate },
+    endDate: { $gt: startDate },
+  };
+  const [reservations, bookings] = await Promise.all([
+    BookingReservation.find({
+      ...overlap,
+      status: "pending",
+      expiresAt: { $gt: now },
+    })
+      .select("equipmentId quantity")
+      .lean(),
+    Booking.find({ ...overlap, paymentStatus: "paid" })
+      .select("equipmentId quantity")
+      .lean(),
+  ]);
+
+  return calculateAvailableQuantities(equipment, reservations, bookings);
+}
+
 export async function getAvailableQuantity({
   equipmentId,
   totalQuantity,
