@@ -5,20 +5,34 @@ import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import mongoose from "mongoose";
 
-const validateSignUp = createAuthMiddleware(async (context) => {
+export function isRoleInputAllowed(path, role) {
+  if (path === "/sign-up/email") {
+    return role === undefined || role === "Customer" || role === "Owner";
+  }
+
+  if (path === "/update-user") {
+    return role === undefined;
+  }
+
+  return true;
+}
+
+const validateAuthUserInput = createAuthMiddleware(async (context) => {
+  const role = context.body?.role;
+  if (!isRoleInputAllowed(context.path, role)) {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        context.path === "/update-user"
+          ? "Account roles cannot be changed through profile updates."
+          : "Choose either a Customer or Owner account. Admin access is assigned by an administrator.",
+    });
+  }
+
   if (context.path !== "/sign-up/email") {
     return;
   }
 
   const { name, password, image } = context.body ?? {};
-  const role = context.body?.role;
-
-  if (role !== undefined && role !== "Customer" && role !== "Owner") {
-    throw new APIError("BAD_REQUEST", {
-      message:
-        "Choose either a Customer or Owner account. Admin access is assigned by an administrator.",
-    });
-  }
 
   if (
     typeof name !== "string" ||
@@ -143,7 +157,7 @@ export function createAuth() {
       }),
     ],
     hooks: {
-      before: validateSignUp,
+      before: validateAuthUserInput,
     },
   });
 }
