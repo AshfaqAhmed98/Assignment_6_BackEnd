@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { rateLimit } from "express-rate-limit";
 import { Router } from "express";
 import multer from "multer";
@@ -58,7 +59,211 @@ function parseImage(request, response, next) {
   });
 }
 
-async function uploadImageToImgBB(request, response, filenamePrefix) {
+class ImageProviderError extends Error {
+  constructor(provider, message, statusCode = 502, cause) {
+    super(message);
+    this.name = "ImageProviderError";
+    this.provider = provider;
+    this.statusCode = statusCode;
+    this.cause = cause;
+  }
+}
+
+function getSecureImageUrl(value, provider) {
+  if (typeof value !== "string") {
+    throw new ImageProviderError(
+      provider,
+      `${provider} returned no image URL.`,
+    );
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch (error) {
+    throw new ImageProviderError(
+      provider,
+      `${provider} returned an invalid image URL.`,
+      502,
+      error,
+    );
+  }
+  if (url.protocol !== "https:") {
+    throw new ImageProviderError(
+      provider,
+      `${provider} returned an insecure image URL.`,
+    );
+  }
+  return url.toString();
+}
+
+async function uploadToImgBB(file, { env, fetchImpl }) {
+  const apiKey = env.IMGBB_API_KEY?.trim();
+  if (!apiKey) {
+    throw new ImageProviderError(
+      "ImgBB",
+      "ImgBB is not configured on the server.",
+      503,
+    );
+  }
+
+  const formData = new FormData();
+  formData.append(
+    "image",
+    new Blob([file.buffer], { type: file.mime }),
+    `image.${file.ext}`,
+  );
+
+  let response;
+  try {
+    response = await fetchImpl(
+      `https://api.imgbb.com/1/upload?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        body: formData,
+        signal: AbortSignal.timeout(20_000),
+      },
+    );
+  } catch (error) {
+    throw new ImageProviderError(
+      "ImgBB",
+      "Could not connect to ImgBB.",
+      502,
+      error,
+    );
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new ImageProviderError(
+      "ImgBB",
+      "ImgBB returned an invalid response.",
+      502,
+      error,
+    );
+  }
+
+  if (!response.ok || result?.success !== true) {
+    throw new ImageProviderError(
+      "ImgBB",
+      "ImgBB could not save this image.",
+    );
+  }
+
+  return getSecureImageUrl(result?.data?.url, "ImgBB");
+}
+
+async function uploadToCloudinary(file, filenamePrefix, { env, fetchImpl, now }) {
+  const cloudName = env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = env.CLOUDINARY_API_SECRET?.trim();
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new ImageProviderError(
+      "Cloudinary",
+      "ImgBB is unavailable and the Cloudinary backup is not configured.",
+      503,
+    );
+  }
+  if (!/^[a-zA-Z0-9-]+$/.test(cloudName)) {
+    throw new ImageProviderError(
+      "Cloudinary",
+      "The Cloudinary cloud name is invalid.",
+      503,
+    );
+  }
+
+  const timestamp = String(Math.floor(now() / 1000));
+  const folder = "gearrent";
+  const signature = createHash("sha1")
+    .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
+    .digest("hex");
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new Blob([file.buffer], { type: file.mime }),
+    `${filenamePrefix}.${file.ext}`,
+  );
+  formData.append("api_key", apiKey);
+  formData.append("timestamp", timestamp);
+  formData.append("folder", folder);
+  formData.append("signature", signature);
+
+  let response;
+  try {
+    response = await fetchImpl(
+      `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
+        signal: AbortSignal.timeout(20_000),
+      },
+    );
+  } catch (error) {
+    throw new ImageProviderError(
+      "Cloudinary",
+      "Could not connect to Cloudinary.",
+      502,
+      error,
+    );
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new ImageProviderError(
+      "Cloudinary",
+      "Cloudinary returned an invalid response.",
+      502,
+      error,
+    );
+  }
+
+  if (!response.ok) {
+    throw new ImageProviderError(
+      "Cloudinary",
+      "Cloudinary could not save this image.",
+    );
+  }
+
+  return getSecureImageUrl(result?.secure_url, "Cloudinary");
+}
+
+export async function uploadImageWithFallback(
+  file,
+  filenamePrefix,
+  { env = process.env, fetchImpl = fetch, now = Date.now } = {},
+) {
+  try {
+    const url = await uploadToImgBB(file, { env, fetchImpl });
+    return { url, provider: "imgbb" };
+  } catch (primaryError) {
+    try {
+      const url = await uploadToCloudinary(file, filenamePrefix, {
+        env,
+        fetchImpl,
+        now,
+      });
+      return { url, provider: "cloudinary" };
+    } catch (backupError) {
+      const statusCode = backupError?.statusCode === 503 ? 503 : 502;
+      const message =
+        statusCode === 503
+          ? backupError?.message
+          : "Image upload failed on both ImgBB and Cloudinary. Try again later.";
+      const error = new ImageProviderError(
+        "Image upload",
+        message,
+        statusCode,
+        { primaryError, backupError },
+      );
+      throw error;
+    }
+  }
+}
+
+async function uploadImage(request, response, filenamePrefix) {
   if (!request.file) {
     return response.status(400).json({
       message: "Choose an image to upload.",
@@ -72,65 +277,25 @@ async function uploadImageToImgBB(request, response, filenamePrefix) {
     });
   }
 
-  const apiKey = process.env.IMGBB_API_KEY;
-  if (!apiKey) {
-    return response.status(503).json({
-      message: "Image uploads are not configured on the server.",
-    });
-  }
-
-  const formData = new FormData();
-  formData.append(
-    "image",
-    new Blob([request.file.buffer], { type: detectedType.mime }),
-    `${filenamePrefix}.${detectedType.ext}`,
-  );
-
-  let imgbbResponse;
   try {
-    imgbbResponse = await fetch(
-      `https://api.imgbb.com/1/upload?key=${encodeURIComponent(apiKey)}`,
+    const result = await uploadImageWithFallback(
       {
-        method: "POST",
-        body: formData,
-        signal: AbortSignal.timeout(20_000),
+        buffer: request.file.buffer,
+        mime: detectedType.mime,
+        ext: detectedType.ext,
       },
+      filenamePrefix,
     );
+    return response.status(201).json(result);
   } catch (error) {
-    if (error?.name === "TimeoutError") {
-      return response.status(504).json({
-        message: "Image upload timed out. Please try again.",
-      });
-    }
-
-    return response.status(502).json({
-      message: "Could not connect to the image upload service.",
+    console.error("Image upload providers failed:", {
+      message: error?.message,
+      statusCode: error?.statusCode,
+    });
+    return response.status(error?.statusCode ?? 502).json({
+      message: error?.message || "Image upload failed. Try again later.",
     });
   }
-
-  let result;
-  try {
-    result = await imgbbResponse.json();
-  } catch {
-    return response.status(502).json({
-      message: "The image upload service returned an invalid response.",
-    });
-  }
-
-  if (!imgbbResponse.ok || result?.success !== true) {
-    return response.status(502).json({
-      message: "The image upload service could not save this image.",
-    });
-  }
-
-  const imageUrl = result?.data?.url;
-  if (typeof imageUrl !== "string") {
-    return response.status(502).json({
-      message: "The image upload service returned no image URL.",
-    });
-  }
-
-  return response.status(201).json({ url: imageUrl });
 }
 
 export function createUploadsRouter(auth) {
@@ -143,7 +308,7 @@ export function createUploadsRouter(auth) {
     imageUploadRateLimit,
     parseImage,
     (request, response) =>
-      uploadImageToImgBB(request, response, "profile"),
+      uploadImage(request, response, "profile"),
   );
   router.post(
     "/equipment-photo",
@@ -152,7 +317,7 @@ export function createUploadsRouter(auth) {
     imageUploadRateLimit,
     parseImage,
     (request, response) =>
-      uploadImageToImgBB(request, response, "equipment"),
+      uploadImage(request, response, "equipment"),
   );
 
   return router;

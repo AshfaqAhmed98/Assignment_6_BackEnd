@@ -4,12 +4,19 @@ import { requirePermission } from "../middleware/permissions.js";
 import { requireJwt } from "../middleware/require-jwt.js";
 import { Booking } from "../models/booking.model.js";
 import { BookingReservation } from "../models/booking-reservation.model.js";
+import { BookingReservationLock } from "../models/booking-reservation-lock.model.js";
 import { Equipment } from "../models/equipment.model.js";
+import { Favorite } from "../models/favorite.model.js";
+import { Payment } from "../models/payment.model.js";
 import { getBookingStatus } from "../services/booking-status.js";
 import {
   accountStatuses,
   normalizeAccountStatus,
 } from "../services/account-status.js";
+import {
+  permanentlyDeleteUserData,
+  PermanentUserDeletionError,
+} from "../services/permanent-user-deletion.js";
 
 const userRoles = new Set(["Customer", "Owner", "Admin"]);
 const accountStatusSet = new Set(accountStatuses);
@@ -119,6 +126,14 @@ export function parseAccountStatusUpdate(body) {
     return null;
   }
   return body.accountStatus;
+}
+
+export function isPermanentDeleteConfirmation(body, email) {
+  return (
+    typeof body?.confirmationEmail === "string" &&
+    typeof email === "string" &&
+    body.confirmationEmail.trim().toLowerCase() === email.trim().toLowerCase()
+  );
 }
 
 function toEquipmentResponse(item) {
@@ -331,10 +346,22 @@ export function createAdminRouter(auth, stripe) {
       const collection = userCollection();
       const target = await collection.findOne(
         { _id: userId },
-        { projection: { role: 1, accountStatus: 1 } },
+        {
+          projection: {
+            role: 1,
+            accountStatus: 1,
+            permanentDeletionState: 1,
+          },
+        },
       );
       if (!target) {
         return response.status(404).json({ message: "User not found." });
+      }
+      if (target.permanentDeletionState) {
+        return response.status(409).json({
+          message:
+            "Permanent deletion has already started. This account cannot be restored.",
+        });
       }
 
       const currentStatus = normalizeAccountStatus(target.accountStatus);
@@ -403,6 +430,134 @@ export function createAdminRouter(auth, stripe) {
         return response.status(404).json({ message: "User not found." });
       }
       return response.json({ item: toUserResponse(updated) });
+    },
+  );
+
+  router.delete(
+    "/users/:id/permanent",
+    ...adminOnly,
+    async (request, response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        return response.status(404).json({ message: "User not found." });
+      }
+      if (!isAvailable(response)) {
+        return;
+      }
+      if (request.params.id === request.auth.userId) {
+        return response.status(409).json({
+          message: "You cannot permanently delete your own account.",
+        });
+      }
+
+      const userId = new mongoose.Types.ObjectId(request.params.id);
+      const target = await userCollection().findOne(
+        { _id: userId },
+        {
+          projection: {
+            email: 1,
+            role: 1,
+            accountStatus: 1,
+            permanentDeletionState: 1,
+          },
+        },
+      );
+      if (!target) {
+        return response.status(404).json({ message: "User not found." });
+      }
+      if (normalizeAccountStatus(target.accountStatus) !== "deleted") {
+        return response.status(409).json({
+          message:
+            "Mark this account as deleted first. Permanent deletion is only available for deleted accounts.",
+        });
+      }
+      if (!isPermanentDeleteConfirmation(request.body, target.email)) {
+        return response.status(400).json({
+          message:
+            "Enter the account's exact email address to confirm permanent deletion.",
+        });
+      }
+
+      const claim = await userCollection().updateOne(
+        {
+          _id: userId,
+          accountStatus: "deleted",
+          permanentDeletionState: { $ne: "in_progress" },
+        },
+        {
+          $set: {
+            permanentDeletionState: "in_progress",
+            permanentDeletionStartedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      );
+      if (claim.matchedCount !== 1) {
+        return response.status(409).json({
+          message:
+            "This account is being permanently deleted or its status changed. Refresh the user list and try again.",
+        });
+      }
+
+      try {
+        await permanentlyDeleteUserData({
+          userId,
+          email: target.email,
+          database: mongoose.connection.getClient().db(),
+          stripe,
+          models: {
+            Booking,
+            BookingReservation,
+            BookingReservationLock,
+            Equipment,
+            Favorite,
+            Payment,
+          },
+        });
+      } catch (error) {
+        console.error("Permanent user deletion failed:", error?.message);
+        const deletionStateUpdate =
+          error instanceof PermanentUserDeletionError && error.safeToRestore
+            ? {
+                $unset: {
+                  permanentDeletionState: "",
+                  permanentDeletionStartedAt: "",
+                },
+              }
+            : {
+                $set: {
+                  permanentDeletionState: "failed",
+                  updatedAt: new Date(),
+                },
+              };
+        try {
+          await userCollection().updateOne(
+            {
+              _id: userId,
+              permanentDeletionState: "in_progress",
+            },
+            deletionStateUpdate,
+          );
+        } catch (stateError) {
+          console.error(
+            "Could not update permanent deletion state:",
+            stateError?.message,
+          );
+        }
+        const statusCode =
+          error instanceof PermanentUserDeletionError
+            ? error.statusCode
+            : 503;
+        return response.status(statusCode).json({
+          message:
+            error?.message ||
+            "Permanent deletion could not be completed. Verify the account before retrying.",
+        });
+      }
+
+      return response.json({
+        message:
+          "The account and its linked local data were permanently deleted. Stripe records were not changed.",
+      });
     },
   );
 

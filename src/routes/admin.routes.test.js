@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isPermanentDeleteConfirmation,
   parseAccountStatusUpdate,
   parseAdminUserQuery,
   parseUserRoleUpdate,
@@ -50,4 +51,29 @@ test("accepts only supported account status updates", () => {
     parseAccountStatusUpdate({ accountStatus: "active", extra: true }),
     null,
   );
+});
+
+test("requires the target user's exact email to confirm permanent deletion", () => {
+  assert.equal(
+    isPermanentDeleteConfirmation(
+      { confirmationEmail: "owner@example.com" },
+      "owner@example.com",
+    ),
+    true,
+  );
+  assert.equal(
+    isPermanentDeleteConfirmation(
+      { confirmationEmail: " OWNER@example.com " },
+      "owner@example.com",
+    ),
+    true,
+  );
+  assert.equal(
+    isPermanentDeleteConfirmation(
+      { confirmationEmail: "different@example.com" },
+      "owner@example.com",
+    ),
+    false,
+  );
+  assert.equal(isPermanentDeleteConfirmation({}, "owner@example.com"), false);
 });

@@ -64,6 +64,12 @@ Suspended and deleted users cannot create sessions or use authenticated APIs;
 their existing sessions are revoked when an Admin changes their status. Delete
 is a reversible soft-delete: user, equipment, rental, and payment records are
 retained, and an Admin can restore the account.
+For permanent removal, an Admin must first soft-delete the account and then
+confirm by entering its exact email. Permanent deletion removes the local
+account, auth sessions and provider links, favorites, owned equipment, related
+bookings and reservations, and local payment records. Open Stripe checkout
+sessions are expired first. Stripe-side payment and refund records are not
+deleted or changed, and this action cannot be restored.
 
 `POST /api/auth/update-user` supports self-service updates to `name`, `image`,
 `phoneNumber`, and `address`. Phone numbers are optional and must use a
@@ -170,6 +176,7 @@ require the `Admin` role from that current user record.
 | `GET /api/admin/users?limit=50&offset=0&search=&role=&status=` | Admin | Search and filter users by role and account status with bounded pagination |
 | `PATCH /api/admin/users/:id/role` | Admin | Set a user's role to `Customer`, `Owner`, or `Admin` |
 | `PATCH /api/admin/users/:id/status` | Admin | Suspend, soft-delete, or restore a user account |
+| `DELETE /api/admin/users/:id/permanent` | Admin | Permanently remove a soft-deleted user and linked local data after exact-email confirmation |
 | `GET /api/admin/equipment` | Admin | List every equipment item and approval status |
 | `GET /api/admin/rentals` | Admin | Monitor paid bookings and active checkout reservations |
 | `PATCH /api/admin/rentals/reservations/:id/cancel` | Admin | Expire an active Stripe checkout and release its reservation |
@@ -177,8 +184,10 @@ require the `Admin` role from that current user record.
 Admins cannot change their own role or account status. The final active Admin
 cannot be demoted, suspended, or deleted. Suspending or soft-deleting an account
 revokes its sessions; restore re-enables sign-in without changing retained
-account or business data. Role and account-status filters are validated, and
-search input is treated as literal text.
+account or business data. Permanent deletion is irreversible, purges local
+business data, and does not issue refunds or remove Stripe-side records. Role
+and account-status filters are validated, and search input is treated as
+literal text.
 Equipment edits and deletions use the existing protected equipment APIs;
 deletion continues to reject items with active checkouts or paid rentals.
 Paid bookings are read-only in the dashboard: refunds must be initiated through
@@ -211,13 +220,17 @@ Example document to add in the `equipments` collection:
 
 ## Registration and profile photos
 
-Set `IMGBB_API_KEY` in `.env` to enable profile photo uploads. Get a key from
-the [ImgBB API page](https://api.imgbb.com/). Keep the key in the backend
-environment; do not add it to a `NEXT_PUBLIC_` variable.
+Set `IMGBB_API_KEY` in `.env` for primary image uploads; get a key from the
+[ImgBB API page](https://api.imgbb.com/). If ImgBB is unavailable, uploads
+automatically fall back to Cloudinary. Configure
+`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in
+the backend environment for the backup. Create these values in your Cloudinary
+account. Keep all keys in the backend environment; do not add them to a
+`NEXT_PUBLIC_` variable.
 
 `POST /api/uploads/profile-photo` accepts one `image` file as
 `multipart/form-data`, checks its image type and a 5 MB size limit, then returns
-the ImgBB URL. This public pre-registration endpoint is rate-limited.
-`POST /api/uploads/equipment-photo` uses the same checks and rate limit, and
-requires an Owner or Admin JWT. Keep the ImgBB key on the backend; do not add it
-to a `NEXT_PUBLIC_` variable.
+the secure URL and provider used. This public pre-registration endpoint is
+rate-limited. `POST /api/uploads/equipment-photo` uses the same checks and rate
+limit, and requires an Owner or Admin JWT. If both providers are unavailable,
+the API returns an explicit upload error.
