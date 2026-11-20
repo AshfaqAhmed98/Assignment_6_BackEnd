@@ -30,6 +30,8 @@ test("parses listing filters and rejects invalid price ranges", () => {
       maxPrice: "900",
       availability: "available",
       sort: "price-low-to-high",
+      page: "2",
+      pageSize: "24",
     }),
     {
       search: "drill",
@@ -39,6 +41,8 @@ test("parses listing filters and rejects invalid price ranges", () => {
       maxPrice: 900,
       availability: "available",
       sort: "price-low-to-high",
+      page: 2,
+      pageSize: 24,
     },
   );
   assert.throws(
@@ -52,6 +56,14 @@ test("parses listing filters and rejects invalid price ranges", () => {
   assert.throws(
     () => parseEquipmentListingQuery({ minPrice: "0x20" }),
     /Minimum price must be a non-negative number/,
+  );
+  assert.throws(
+    () => parseEquipmentListingQuery({ page: "0" }),
+    /Page must be a positive integer/,
+  );
+  assert.throws(
+    () => parseEquipmentListingQuery({ pageSize: "1000" }),
+    /Page size must be a positive integer/,
   );
 });
 

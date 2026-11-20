@@ -5,6 +5,7 @@ import { requirePermission } from "../middleware/permissions.js";
 import { Booking } from "../models/booking.model.js";
 import { BookingReservation } from "../models/booking-reservation.model.js";
 import { Payment } from "../models/payment.model.js";
+import { getBookingStatus } from "../services/booking-status.js";
 
 function getPaymentIntentId(paymentIntent) {
   if (typeof paymentIntent === "string") {
@@ -57,6 +58,10 @@ async function fulfillCheckoutSession(session, eventId) {
         deliveryAddress: reservation.deliveryAddress,
         additionalNotes: reservation.additionalNotes,
         paymentStatus: "paid",
+        bookingStatus: getBookingStatus(
+          reservation.startDate,
+          reservation.endDate,
+        ),
         stripeSessionId: session.id,
         stripePaymentIntentId,
       },

@@ -82,6 +82,28 @@ const bookingSchema = new mongoose.Schema(
       enum: ["paid"],
       required: true,
     },
+    bookingStatus: {
+      type: String,
+      enum: ["upcoming", "ongoing", "completed"],
+      default: "upcoming",
+      index: true,
+    },
+    customerCompletionNotifiedAt: {
+      type: Date,
+      default: null,
+    },
+    ownerCompletionNotifiedAt: {
+      type: Date,
+      default: null,
+    },
+    completionNotificationClaimedAt: {
+      type: Date,
+      default: null,
+    },
+    completionNotificationSentAt: {
+      type: Date,
+      default: null,
+    },
     stripeSessionId: {
       type: String,
       required: true,

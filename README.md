@@ -141,6 +141,7 @@ HTTP 403.
 | Endpoint | Access | Purpose |
 | --- | --- | --- |
 | `GET /api/equipment/featured` | Public | Browse approved equipment |
+| `GET /api/equipment?page=1&pageSize=12` | Public | Browse approved equipment with bounded pagination and current search/filter parameters |
 | `GET /api/equipment/:id` | Customer, Owner, Admin | Read an approved item |
 | `GET /api/equipment/mine` | Owner, Admin | List owned items (Admin sees all) |
 | `GET /api/equipment/mine/:id` | Owner of item, Admin | Read a managed listing, including pending items |
@@ -272,3 +273,26 @@ the secure URL and provider used. This public pre-registration endpoint is
 rate-limited. `POST /api/uploads/equipment-photo` uses the same checks and rate
 limit, and requires an Owner or Admin JWT. If both providers are unavailable,
 the API returns an explicit upload error.
+
+## Booking completion automation
+
+The API schedules a UTC job every minute. It updates paid booking statuses to
+`ongoing` or `completed` based on their rental dates. When a booking completes,
+the job sends separate email notifications to the renter and equipment owner.
+Per-recipient timestamps and a short-lived claim prevent duplicate sends during
+normal retries; failed recipients are retried on later runs.
+
+Configure SMTP in the backend `.env` to enable completion emails:
+
+```env
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+```
+
+`SMTP_FROM` must be an address accepted by the configured mail provider. Without
+SMTP configuration, booking statuses still update and email notifications
+remain pending until SMTP is configured.

@@ -297,7 +297,14 @@ export function createEquipmentRouter(auth) {
       options,
     });
 
-    return response.json({ items, categories, total: items.length });
+    const offset = (options.page - 1) * options.pageSize;
+    return response.json({
+      items: items.slice(offset, offset + options.pageSize),
+      categories,
+      total: items.length,
+      page: options.page,
+      pageSize: options.pageSize,
+    });
   });
 
   router.get("/featured", async (_request, response) => {

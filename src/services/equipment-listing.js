@@ -12,6 +12,21 @@ const sortOptions = new Set([
   "price-high-to-low",
 ]);
 
+function readPositiveInteger(value, field, fallback, maximum) {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (
+    typeof value !== "string" ||
+    !/^[1-9]\d*$/.test(value) ||
+    !Number.isSafeInteger(Number(value)) ||
+    Number(value) > maximum
+  ) {
+    throw new Error(`${field} must be a positive integer no greater than ${maximum}.`);
+  }
+  return Number(value);
+}
+
 function readText(value, field, maxLength) {
   if (value === undefined) {
     return "";
@@ -51,6 +66,8 @@ export function parseEquipmentListingQuery(query) {
   const rawRentalType = readText(query.rentalType, "Rental type", 10);
   const rawAvailability = readText(query.availability, "Availability", 12);
   const rawSort = readText(query.sort, "Sort", 32);
+  const page = readPositiveInteger(query.page, "Page", 1, 1000000);
+  const pageSize = readPositiveInteger(query.pageSize, "Page size", 12, 60);
   const minPrice = readPrice(query.minPrice, "Minimum price");
   const maxPrice = readPrice(query.maxPrice, "Maximum price");
   const rentalType = rawRentalType || "daily";
@@ -80,6 +97,8 @@ export function parseEquipmentListingQuery(query) {
     maxPrice,
     availability,
     sort,
+    page,
+    pageSize,
   };
 }
 
