@@ -59,6 +59,12 @@ not expose an admin-promotion endpoint or credential in the frontend. The
 role is included in newly issued JWTs, so have a promoted user sign in again
 to obtain a token with the updated role.
 
+Accounts have an `accountStatus` of `active`, `suspended`, or `deleted`.
+Suspended and deleted users cannot create sessions or use authenticated APIs;
+their existing sessions are revoked when an Admin changes their status. Delete
+is a reversible soft-delete: user, equipment, rental, and payment records are
+retained, and an Admin can restore the account.
+
 `POST /api/auth/update-user` supports self-service updates to `name`, `image`,
 `phoneNumber`, and `address`. Phone numbers are optional and must use a
 supported international phone format; addresses are limited to 500 characters.
@@ -151,6 +157,36 @@ Each equipment document has `name`, `category`, `location`, `dailyRate`,
 owner-created listings) `ownerId`. `dailyRate` is the derived daily equivalent
 used by the booking engine. Owner image uploads return an ImgBB HTTPS URL;
 legacy records may use a root-relative path.
+
+## Admin dashboard APIs
+
+All authenticated API endpoints load the caller's current role from MongoDB
+after verifying the Bearer JWT. Role changes therefore take effect immediately,
+even when an account still has a previously issued token. Admin endpoints also
+require the `Admin` role from that current user record.
+
+| Endpoint | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/admin/users?limit=50&offset=0&search=&role=&status=` | Admin | Search and filter users by role and account status with bounded pagination |
+| `PATCH /api/admin/users/:id/role` | Admin | Set a user's role to `Customer`, `Owner`, or `Admin` |
+| `PATCH /api/admin/users/:id/status` | Admin | Suspend, soft-delete, or restore a user account |
+| `GET /api/admin/equipment` | Admin | List every equipment item and approval status |
+| `GET /api/admin/rentals` | Admin | Monitor paid bookings and active checkout reservations |
+| `PATCH /api/admin/rentals/reservations/:id/cancel` | Admin | Expire an active Stripe checkout and release its reservation |
+
+Admins cannot change their own role or account status. The final active Admin
+cannot be demoted, suspended, or deleted. Suspending or soft-deleting an account
+revokes its sessions; restore re-enables sign-in without changing retained
+account or business data. Role and account-status filters are validated, and
+search input is treated as literal text.
+Equipment edits and deletions use the existing protected equipment APIs;
+deletion continues to reject items with active checkouts or paid rentals.
+Paid bookings are read-only in the dashboard: refunds must be initiated through
+Stripe rather than changing a local payment status.
+
+Approved equipment owned by suspended or deleted accounts is hidden from
+public listings and cannot be booked. Restoring the owner makes those listings
+available again without changing their approval state.
 
 Example document to add in the `equipments` collection:
 

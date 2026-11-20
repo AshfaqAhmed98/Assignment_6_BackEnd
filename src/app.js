@@ -10,6 +10,7 @@ import {
   createStripeWebhookHandler,
 } from "./routes/payments.routes.js";
 import { createUploadsRouter } from "./routes/profile-photo.routes.js";
+import { createAdminRouter } from "./routes/admin.routes.js";
 import { createStripeClient } from "./services/stripe-client.js";
 
 export function createApp(auth, stripe = createStripeClient()) {
@@ -60,6 +61,7 @@ export function createApp(auth, stripe = createStripeClient()) {
   app.use("/api/bookings", createBookingsRouter(auth, stripe));
   app.use("/api/payments", createPaymentsRouter(auth));
   app.use("/api/uploads", createUploadsRouter(auth));
+  app.use("/api/admin", createAdminRouter(auth, stripe));
 
   app.use((_request, response) => {
     response.status(404).json({

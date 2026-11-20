@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getProfileInputError, isRoleInputAllowed } from "./auth.js";
+import {
+  getProfileInputError,
+  isAccountSignInAllowed,
+  isRoleInputAllowed,
+} from "./auth.js";
+
+test("allows active and legacy accounts to sign in, but blocks inactive accounts", () => {
+  assert.equal(isAccountSignInAllowed({ accountStatus: "active" }), true);
+  assert.equal(isAccountSignInAllowed({}), true);
+  assert.equal(isAccountSignInAllowed({ accountStatus: "suspended" }), false);
+  assert.equal(isAccountSignInAllowed({ accountStatus: "deleted" }), false);
+  assert.equal(isAccountSignInAllowed(null), false);
+});
 
 test("public signup can select only Customer or Owner roles", () => {
   assert.equal(isRoleInputAllowed("/sign-up/email", undefined), true);

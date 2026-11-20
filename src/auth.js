@@ -4,6 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import mongoose from "mongoose";
+import { isAccountStatusActive } from "./services/account-status.js";
 
 export function isRoleInputAllowed(path, role) {
   if (path === "/sign-up/email") {
@@ -65,6 +66,10 @@ export function getProfileInputError(body) {
   }
 
   return null;
+}
+
+export function isAccountSignInAllowed(user) {
+  return Boolean(user) && isAccountStatusActive(user.accountStatus);
 }
 
 const validateAuthUserInput = createAuthMiddleware(async (context) => {
@@ -196,6 +201,12 @@ export function createAuth() {
           defaultValue: "",
           input: true,
         },
+        accountStatus: {
+          type: "string",
+          required: true,
+          defaultValue: "active",
+          input: false,
+        },
       },
     },
     socialProviders:
@@ -228,6 +239,32 @@ export function createAuth() {
         },
       }),
     ],
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session) => {
+            if (!mongoose.isValidObjectId(session.userId)) {
+              throw new APIError("FORBIDDEN", {
+                message: "This account cannot sign in.",
+              });
+            }
+
+            const user = await database
+              .collection("user")
+              .findOne(
+                { _id: new mongoose.Types.ObjectId(session.userId) },
+                { projection: { accountStatus: 1 } },
+              );
+            if (!isAccountSignInAllowed(user)) {
+              throw new APIError("FORBIDDEN", {
+                message:
+                  "This account is suspended or deleted. Contact a platform administrator.",
+              });
+            }
+          },
+        },
+      },
+    },
     hooks: {
       before: validateAuthUserInput,
     },

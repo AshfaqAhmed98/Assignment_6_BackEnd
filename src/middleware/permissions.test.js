@@ -39,10 +39,15 @@ test("allows only owners and admins to create equipment", () => {
 
 test("allows only admins to approve equipment", () => {
   assert.equal(invokePermission("equipment:approve", "Admin").nextCalled, true);
+  assert.equal(invokePermission("admin:manage", "Admin").nextCalled, true);
 
   const owner = invokePermission("equipment:approve", "Owner");
   assert.equal(owner.response.statusCode, 403);
   assert.equal(owner.nextCalled, false);
+  assert.equal(
+    invokePermission("admin:manage", "Owner").response.statusCode,
+    403,
+  );
 });
 
 test("allows each defined role to read approved equipment", () => {

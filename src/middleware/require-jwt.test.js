@@ -51,6 +51,9 @@ test("requires a Bearer access token", async () => {
           return { payload: { sub: "user-1" } };
         },
       },
+    }, {
+      getCurrentUser: async () => ({ role: "Customer" }),
+      isConnected: () => true,
     }),
     undefined,
   );
@@ -85,7 +88,7 @@ test("passes verified identity to the route", async () => {
           verifiedToken = body.token;
           return {
             payload: {
-              sub: "user-1",
+              sub: "507f1f77bcf86cd799439011",
               role: "Customer",
               name: "Renter One",
               email: "renter@example.com",
@@ -93,6 +96,13 @@ test("passes verified identity to the route", async () => {
           };
         },
       },
+    }, {
+      getCurrentUser: async () => ({
+        role: "Customer",
+        name: "Renter One",
+        email: "renter@example.com",
+      }),
+      isConnected: () => true,
     }),
     "Bearer valid.token.value",
   );
@@ -100,11 +110,125 @@ test("passes verified identity to the route", async () => {
   assert.equal(verifiedToken, "valid.token.value");
   assert.equal(result.nextCalled, true);
   assert.deepEqual(result.request.auth, {
-    userId: "user-1",
+    userId: "507f1f77bcf86cd799439011",
     role: "Customer",
     name: "Renter One",
     email: "renter@example.com",
   });
+});
+
+test("uses the current database role instead of a stale JWT role", async () => {
+  const result = await invokeMiddleware(
+    requireJwt(
+      {
+        api: {
+          async verifyJWT() {
+            return {
+              payload: {
+                sub: "507f1f77bcf86cd799439011",
+                role: "Admin",
+                name: "Old name",
+              },
+            };
+          },
+        },
+      },
+      {
+        getCurrentUser: async () => ({
+          role: "Customer",
+          name: "Current name",
+          email: "current@example.com",
+        }),
+        isConnected: () => true,
+      },
+    ),
+    "Bearer valid.token.value",
+  );
+
+  assert.equal(result.nextCalled, true);
+  assert.deepEqual(result.request.auth, {
+    userId: "507f1f77bcf86cd799439011",
+    role: "Customer",
+    name: "Current name",
+    email: "current@example.com",
+  });
+});
+
+test("rejects a token after its account has been removed", async () => {
+  const result = await invokeMiddleware(
+    requireJwt(
+      {
+        api: {
+          async verifyJWT() {
+            return {
+              payload: { sub: "507f1f77bcf86cd799439011" },
+            };
+          },
+        },
+      },
+      {
+        getCurrentUser: async () => null,
+        isConnected: () => true,
+      },
+    ),
+    "Bearer valid.token.value",
+  );
+
+  assert.equal(result.response.statusCode, 401);
+  assert.equal(result.nextCalled, false);
+});
+
+test("rejects tokens for suspended and deleted accounts", async () => {
+  for (const accountStatus of ["suspended", "deleted"]) {
+    const result = await invokeMiddleware(
+      requireJwt(
+        {
+          api: {
+            async verifyJWT() {
+              return {
+                payload: { sub: "507f1f77bcf86cd799439011" },
+              };
+            },
+          },
+        },
+        {
+          getCurrentUser: async () => ({
+            role: "Customer",
+            accountStatus,
+          }),
+          isConnected: () => true,
+        },
+      ),
+      "Bearer valid.token.value",
+    );
+
+    assert.equal(result.response.statusCode, 401);
+    assert.equal(result.nextCalled, false);
+  }
+});
+
+test("returns service unavailable when role lookup cannot reach the database", async () => {
+  const result = await invokeMiddleware(
+    requireJwt(
+      {
+        api: {
+          async verifyJWT() {
+            return {
+              payload: { sub: "507f1f77bcf86cd799439011" },
+            };
+          },
+        },
+      },
+      {
+        getCurrentUser: async () => null,
+        isConnected: () => false,
+      },
+    ),
+    "Bearer valid.token.value",
+  );
+
+  assert.equal(result.response.statusCode, 503);
+  assert.equal(result.nextCalled, false);
 });
 
 test("returns service unavailable when auth is not initialized", async () => {

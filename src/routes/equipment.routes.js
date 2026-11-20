@@ -18,6 +18,10 @@ import {
   getUtcStartOfDay,
   parseRentalDateRange,
 } from "../services/rental-pricing.js";
+import {
+  filterActiveOwnerEquipment,
+  isEquipmentOwnerActive,
+} from "../services/account-status.js";
 
 const editableFields = new Set([
   "name",
@@ -263,11 +267,14 @@ export function createEquipmentRouter(auth) {
       return;
     }
 
-    const equipment = await Equipment.find({ approvalStatus: "approved" })
+    const approvedEquipment = await Equipment.find({
+      approvalStatus: "approved",
+    })
       .select(
-        "name category location dailyRate rentalPrice rentalType quantity image description createdAt",
+        "name category location dailyRate rentalPrice rentalType quantity image description createdAt ownerId",
       )
       .lean();
+    const equipment = await filterActiveOwnerEquipment(approvedEquipment);
     const categories = [
       ...new Set(equipment.map((item) => item.category)),
     ].sort((left, right) => left.localeCompare(right));
@@ -298,11 +305,16 @@ export function createEquipmentRouter(auth) {
       return;
     }
 
-    const equipment = await Equipment.find({ approvalStatus: "approved" })
+    const approvedEquipment = await Equipment.find({
+      approvalStatus: "approved",
+    })
       .sort({ createdAt: -1 })
-      .limit(6)
-      .select("name category location dailyRate image description")
+      .select("name category location dailyRate image description ownerId")
       .lean();
+    const equipment = (await filterActiveOwnerEquipment(approvedEquipment)).slice(
+      0,
+      6,
+    );
 
     response.json({
       items: equipment.map((item) => ({
@@ -568,9 +580,9 @@ export function createEquipmentRouter(auth) {
         _id: request.params.id,
         approvalStatus: "approved",
       })
-        .select("quantity")
+        .select("quantity ownerId")
         .lean();
-      if (!equipment) {
+      if (!equipment || !(await isEquipmentOwnerActive(equipment.ownerId))) {
         return response.status(404).json({ message: "Equipment not found." });
       }
 
@@ -602,11 +614,11 @@ export function createEquipmentRouter(auth) {
       approvalStatus: "approved",
     })
       .select(
-        "name category location dailyRate rentalPrice rentalType quantity image description condition brand model rentalTerms ownerName",
+      "name category location dailyRate rentalPrice rentalType quantity image description condition brand model rentalTerms ownerName ownerId",
       )
       .lean();
 
-    if (!item) {
+    if (!item || !(await isEquipmentOwnerActive(item.ownerId))) {
       return response.status(404).json({
         message: "Equipment not found.",
       });

@@ -16,6 +16,7 @@ import {
   parseRentalDateRange,
 } from "../services/rental-pricing.js";
 import { getBookingStatus } from "../services/booking-status.js";
+import { isEquipmentOwnerActive } from "../services/account-status.js";
 
 const checkoutHoldMilliseconds = 35 * 60 * 1000;
 const requestIdPattern =
@@ -291,9 +292,9 @@ export function createBookingsRouter(auth, stripe) {
         _id: input.equipmentId,
         approvalStatus: "approved",
       })
-        .select("name dailyRate rentalPrice rentalType quantity")
+        .select("name dailyRate rentalPrice rentalType quantity ownerId")
         .lean();
-      if (!equipment) {
+      if (!equipment || !(await isEquipmentOwnerActive(equipment.ownerId))) {
         return response.status(404).json({ message: "Equipment not found." });
       }
 
