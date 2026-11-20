@@ -5,6 +5,7 @@ import { requirePermission } from "../middleware/permissions.js";
 import { Booking } from "../models/booking.model.js";
 import { BookingReservation } from "../models/booking-reservation.model.js";
 import { Equipment } from "../models/equipment.model.js";
+import { Payment } from "../models/payment.model.js";
 import {
   EquipmentReservationLockError,
   getAvailableQuantity,
@@ -18,6 +19,10 @@ import {
 import { getBookingStatus } from "../services/booking-status.js";
 import { isEquipmentOwnerActive } from "../services/account-status.js";
 import { isStripeCheckoutConfigured } from "../services/stripe-client.js";
+import {
+  fillMonthlyAnalytics,
+  getUtcMonthWindow,
+} from "../services/monthly-analytics.js";
 
 const checkoutHoldMilliseconds = 35 * 60 * 1000;
 const requestIdPattern =
@@ -110,6 +115,104 @@ export function createBookingsRouter(auth, stripe) {
   const createBooking = requirePermission("booking:create");
   const readOwnBookings = requirePermission("booking:read-own");
   const readOwnerBookings = requirePermission("booking:read-own-equipment");
+
+  router.get(
+    "/owner/analytics",
+    authenticate,
+    readOwnerBookings,
+    async (request, response) => {
+      if (!isAvailable(response)) {
+        return;
+      }
+
+      const ownerFilter = { ownerId: request.auth.userId };
+      const [totalListedEquipment, equipmentIds] = await Promise.all([
+        Equipment.countDocuments(ownerFilter),
+        Equipment.distinct("_id", ownerFilter),
+      ]);
+      const now = new Date();
+      const today = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+      );
+      const { startDate } = getUtcMonthWindow(now);
+
+      if (equipmentIds.length === 0) {
+        return response.json({
+          totalListedEquipment,
+          completedRentals: 0,
+          totalEarningsMinor: 0,
+          monthlyEarnings: fillMonthlyAnalytics([], "amountMinor", now),
+        });
+      }
+
+      const [completedRentals, earnings] = await Promise.all([
+        Booking.countDocuments({
+          equipmentId: { $in: equipmentIds },
+          endDate: { $lte: today },
+        }),
+        Payment.aggregate([
+          {
+            $lookup: {
+              from: Booking.collection.name,
+              localField: "bookingId",
+              foreignField: "_id",
+              as: "booking",
+            },
+          },
+          { $unwind: "$booking" },
+          {
+            $match: {
+              status: "paid",
+              "booking.equipmentId": { $in: equipmentIds },
+            },
+          },
+          {
+            $facet: {
+              total: [
+                {
+                  $group: {
+                    _id: null,
+                    amountMinor: { $sum: "$amountMinor" },
+                  },
+                },
+              ],
+              monthly: [
+                {
+                  $match: {
+                    createdAt: { $gte: startDate, $lte: now },
+                  },
+                },
+                {
+                  $group: {
+                    _id: {
+                      $dateToString: {
+                        format: "%Y-%m",
+                        date: "$createdAt",
+                        timezone: "UTC",
+                      },
+                    },
+                    amountMinor: { $sum: "$amountMinor" },
+                  },
+                },
+              ],
+            },
+          },
+        ]),
+      ]);
+
+      const earningsSummary = earnings[0] ?? { total: [], monthly: [] };
+      return response.json({
+        totalListedEquipment,
+        completedRentals,
+        totalEarningsMinor: earningsSummary.total[0]?.amountMinor ?? 0,
+        monthlyEarnings: fillMonthlyAnalytics(
+          earningsSummary.monthly,
+          "amountMinor",
+          now,
+        ),
+      });
+    },
+  );
 
   router.get("/", authenticate, readOwnBookings, async (request, response) => {
     if (!isAvailable(response)) {

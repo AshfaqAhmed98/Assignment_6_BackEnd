@@ -17,6 +17,10 @@ import {
   permanentlyDeleteUserData,
   PermanentUserDeletionError,
 } from "../services/permanent-user-deletion.js";
+import {
+  fillMonthlyAnalytics,
+  getUtcMonthWindow,
+} from "../services/monthly-analytics.js";
 
 const userRoles = new Set(["Customer", "Owner", "Admin"]);
 const accountStatusSet = new Set(accountStatuses);
@@ -217,6 +221,65 @@ export function createAdminRouter(auth, stripe) {
   const userCollection = () =>
     mongoose.connection.getClient().db().collection("user");
   const adminOnly = [authenticate, manageAdmin];
+
+  router.get("/analytics", ...adminOnly, async (_request, response) => {
+    if (!isAvailable(response)) {
+      return;
+    }
+
+    const now = new Date();
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const { startDate } = getUtcMonthWindow(now);
+    const [
+      totalUsers,
+      totalEquipment,
+      totalBookings,
+      pendingApprovals,
+      completedRentals,
+      revenue,
+      monthlyBookings,
+    ] = await Promise.all([
+      userCollection().countDocuments({}),
+      Equipment.countDocuments({}),
+      Booking.countDocuments({}),
+      Equipment.countDocuments({ approvalStatus: "pending" }),
+      Booking.countDocuments({ endDate: { $lte: today } }),
+      Payment.aggregate([
+        { $group: { _id: null, amountMinor: { $sum: "$amountMinor" } } },
+      ]),
+      Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: startDate, $lte: now },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: "%Y-%m",
+                date: "$createdAt",
+                timezone: "UTC",
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    return response.json({
+      totalUsers,
+      totalEquipment,
+      totalBookings,
+      pendingApprovals,
+      completedRentals,
+      totalRevenueMinor: revenue[0]?.amountMinor ?? 0,
+      monthlyBookings: fillMonthlyAnalytics(monthlyBookings, "count", now),
+    });
+  });
 
   router.get("/users", ...adminOnly, async (request, response) => {
     if (!isAvailable(response)) {

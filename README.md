@@ -185,6 +185,10 @@ The owner dashboard scopes equipment and rental records to the signed-in owner:
 | Endpoint | Access | Purpose |
 | --- | --- | --- |
 | `GET /api/bookings/owner` | Owner | List paid rentals and active checkout reservations for owned equipment |
+| `GET /api/bookings/owner/analytics` | Owner | Return owned listing count, completed rentals, paid earnings, and monthly earnings for the last 12 UTC months |
+
+Analytics money values are integer minor units (paisa), and monthly buckets use
+UTC calendar months.
 
 Rental rows include a customer name/email snapshot from the checkout token and
 the phone number and delivery address provided for that booking. Pending
@@ -206,6 +210,7 @@ require the `Admin` role from that current user record.
 
 | Endpoint | Access | Purpose |
 | --- | --- | --- |
+| `GET /api/admin/analytics` | Admin | Return platform user, equipment, booking, approval, completed rental, paid revenue, and 12-month booking totals |
 | `GET /api/admin/users?limit=50&offset=0&search=&role=&status=` | Admin | Search and filter users by role and account status with bounded pagination |
 | `PATCH /api/admin/users/:id/role` | Admin | Set a user's role to `Customer`, `Owner`, or `Admin` |
 | `PATCH /api/admin/users/:id/status` | Admin | Suspend, soft-delete, or restore a user account |
