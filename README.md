@@ -19,6 +19,39 @@ MongoDB is connected.
 The server uses Cloudflare and Google DNS resolvers for MongoDB Atlas SRV
 lookups.
 
+## Stripe Checkout (local test mode)
+
+Stripe Checkout requires both a Stripe secret key and a webhook signing secret.
+Use Stripe test-mode credentials for local development:
+
+1. Copy your test secret key (`sk_test_...`) from the Stripe Dashboard into
+   `STRIPE_SECRET_KEY` in the backend `.env`. Keep Stripe secrets out of the
+   frontend and out of source control.
+2. Install and authenticate the Stripe CLI, then run:
+
+   ```sh
+   stripe login
+   stripe listen --events checkout.session.completed,checkout.session.expired --forward-to http://localhost:5000/api/payments/stripe/webhook
+   ```
+
+3. Copy the `whsec_...` signing secret printed by `stripe listen` into
+   `STRIPE_WEBHOOK_SECRET` in the backend `.env`. Keep the listener running and
+   restart the backend whenever either environment variable changes.
+4. In the Stripe test/sandbox Dashboard's Payment methods settings, enable
+   Cards. Keep delayed payment methods disabled until their asynchronous
+   webhook events are supported by this application.
+5. Set the frontend `.env.local` to
+   `NEXT_PUBLIC_API_URL=http://localhost:5000`, then run both applications.
+6. Sign in as a Customer, start a rental checkout, and use Stripe's test card
+   `4242 4242 4242 4242` with a future expiry date and any CVC.
+
+The backend only starts a checkout when both Stripe values are configured.
+Bookings are created after the signed `checkout.session.completed` webhook is
+verified; returning to the success page alone does not confirm a payment.
+For production, configure an HTTPS webhook endpoint in Stripe and use the
+production secret key and matching webhook signing secret. Never commit either
+secret.
+
 ## Authentication
 
 Better Auth handles email/password signup, sign-in, sign-out, and session

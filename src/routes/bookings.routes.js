@@ -17,6 +17,7 @@ import {
 } from "../services/rental-pricing.js";
 import { getBookingStatus } from "../services/booking-status.js";
 import { isEquipmentOwnerActive } from "../services/account-status.js";
+import { isStripeCheckoutConfigured } from "../services/stripe-client.js";
 
 const checkoutHoldMilliseconds = 35 * 60 * 1000;
 const requestIdPattern =
@@ -249,7 +250,7 @@ export function createBookingsRouter(auth, stripe) {
     authenticate,
     createBooking,
     async (request, response) => {
-      if (!stripe) {
+      if (!isStripeCheckoutConfigured(stripe)) {
         return response.status(503).json({
           message: "Stripe Checkout is not configured on the server.",
         });
@@ -394,7 +395,6 @@ export function createBookingsRouter(auth, stripe) {
         session = await stripe.checkout.sessions.create(
           {
             mode: "payment",
-            payment_method_types: ["card"],
             line_items: [
               {
                 quantity: rentalPrice.billedUnits * input.requiredQuantity,
