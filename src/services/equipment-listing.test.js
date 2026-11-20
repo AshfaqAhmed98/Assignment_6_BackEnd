@@ -164,6 +164,29 @@ test("filters by category and sorts rental prices in both directions", () => {
   );
 });
 
+test("searches equipment by title, category, and location", () => {
+  const equipment = [
+    equipmentItem("1", { name: "Cordless Drill", category: "Power Tools" }),
+    equipmentItem("2", { name: "Concrete Mixer", category: "Construction" }),
+    equipmentItem("3", { name: "Garden Saw", location: "North Dhaka" }),
+  ];
+  const availableQuantities = new Map([
+    ["1", 1],
+    ["2", 1],
+    ["3", 1],
+  ]);
+  const search = (value) =>
+    createEquipmentListing({
+      equipment,
+      availableQuantities,
+      options: parseEquipmentListingQuery({ search: value }),
+    }).map((item) => item.id);
+
+  assert.deepEqual(search("cordless"), ["1"]);
+  assert.deepEqual(search("construction"), ["2"]);
+  assert.deepEqual(search("north dhaka"), ["3"]);
+});
+
 test("calculates quantities after pending reservations and paid bookings", () => {
   const quantities = calculateAvailableQuantities(
     [equipmentItem("1", { quantity: 4 }), equipmentItem("2", { quantity: 1 })],

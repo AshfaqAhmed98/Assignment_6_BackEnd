@@ -127,6 +127,7 @@ export function createEquipmentListing({
       const matchesSearch =
         !normalizedSearch ||
         item.name.toLocaleLowerCase().includes(normalizedSearch) ||
+        item.category.toLocaleLowerCase().includes(normalizedSearch) ||
         item.location.toLocaleLowerCase().includes(normalizedSearch);
       const matchesCategory =
         !normalizedCategory ||
