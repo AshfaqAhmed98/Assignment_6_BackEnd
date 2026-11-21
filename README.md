@@ -169,6 +169,7 @@ records to the current account:
 | --- | --- | --- |
 | `GET /api/bookings` | Customer | List the signed-in customer's paid bookings |
 | `POST /api/bookings/checkout` | Customer | Reserve equipment and start Stripe Checkout |
+| `POST /api/contact` | Public | Send a message to GearRent support |
 | `GET /api/reviews` | Public | List the latest 8 renter reviews |
 | `POST /api/reviews` | Customer | Submit a 1–5-star review for a completed paid booking |
 | `GET /api/favorites` | Customer | List the signed-in customer's saved equipment |
@@ -302,3 +303,8 @@ SMTP_FROM=
 `SMTP_FROM` must be an address accepted by the configured mail provider. Without
 SMTP configuration, booking statuses still update and email notifications
 remain pending until SMTP is configured.
+
+The public contact form sends messages through the same SMTP configuration to
+`CONTACT_EMAIL`. Set it to the public support inbox in the backend `.env`. The
+endpoint accepts up to five messages per IP in 15 minutes and requires the SMTP
+settings above.

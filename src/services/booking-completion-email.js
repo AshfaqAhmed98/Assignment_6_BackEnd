@@ -41,12 +41,13 @@ export function createBookingCompletionMailer(
 
   return {
     isConfigured: true,
-    async sendMail({ to, subject, text }) {
+    async sendMail({ to, subject, text, replyTo }) {
       await transporter.sendMail({
         from: environment.SMTP_FROM.trim(),
         to,
         subject,
         text,
+        ...(replyTo ? { replyTo } : {}),
       });
     },
   };
