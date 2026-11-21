@@ -1,6 +1,6 @@
 import "dotenv/config";
 import dns from "node:dns";
-import { createApp } from "./app.js";
+import { createApp } from "./create-app.js";
 import { createAuth } from "./auth.js";
 import { connectToDatabase } from "./config/database.js";
 import { scheduleBookingCompletionUpdates } from "./services/booking-completion-job.js";
