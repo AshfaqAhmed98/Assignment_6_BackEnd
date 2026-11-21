@@ -242,6 +242,16 @@ function invalidEquipment(response) {
   });
 }
 
+export async function approveAllPendingEquipment(
+  EquipmentModel = Equipment,
+) {
+  const result = await EquipmentModel.updateMany(
+    { approvalStatus: "pending" },
+    { $set: { approvalStatus: "approved" } },
+  );
+  return result.modifiedCount;
+}
+
 export function createEquipmentRouter(auth) {
   const router = Router();
   const authenticate = requireJwt(auth);
@@ -394,6 +404,20 @@ export function createEquipmentRouter(auth) {
         .sort({ createdAt: 1 })
         .lean();
       return response.json({ items: equipment.map(toEquipmentResponse) });
+    },
+  );
+
+  router.patch(
+    "/admin/approval/approve-all",
+    authenticate,
+    approveEquipment,
+    async (_request, response) => {
+      if (!isAvailable(response)) {
+        return;
+      }
+
+      const approvedCount = await approveAllPendingEquipment();
+      return response.json({ approvedCount });
     },
   );
 

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseEquipmentInput } from "./equipment.routes.js";
+import {
+  approveAllPendingEquipment,
+  parseEquipmentInput,
+} from "./equipment.routes.js";
 
 const equipmentInput = {
   name: "Jobsite generator",
@@ -66,4 +69,31 @@ test("rejects mismatched pricing fields and owner-controlled status data", () =>
     }),
     null,
   );
+});
+
+test("bulk approval changes only pending listings and returns the modified count", async () => {
+  let update;
+  const approvedCount = await approveAllPendingEquipment({
+    async updateMany(filter, changes) {
+      update = { filter, changes };
+      return { modifiedCount: 20 };
+    },
+  });
+
+  assert.deepEqual(update, {
+    filter: { approvalStatus: "pending" },
+    changes: { $set: { approvalStatus: "approved" } },
+  });
+  assert.equal(approvedCount, 20);
+});
+
+test("bulk approval reports zero when there are no pending listings", async () => {
+  const approvedCount = await approveAllPendingEquipment({
+    async updateMany(filter) {
+      assert.deepEqual(filter, { approvalStatus: "pending" });
+      return { modifiedCount: 0 };
+    },
+  });
+
+  assert.equal(approvedCount, 0);
 });
