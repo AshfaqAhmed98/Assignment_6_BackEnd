@@ -1,0 +1,9 @@
+{
+  "schedules": {
+    "booking-completion": {
+      "schedule": "*/15 * * * *",
+      "path": "/api/cron/bookings/completion",
+      "requestMethod": "POST"
+    }
+  }
+}

@@ -22,7 +22,9 @@ try {
 
 if (databaseReady) {
   const mailer = createBookingCompletionMailer();
-  scheduleBookingCompletionUpdates({ mailer });
+  if (process.env.VERCEL !== "1") {
+    scheduleBookingCompletionUpdates({ mailer });
+  }
 }
 
 const app = createApp(auth);

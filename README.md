@@ -289,6 +289,13 @@ the job sends separate email notifications to the renter and equipment owner.
 Per-recipient timestamps and a short-lived claim prevent duplicate sends during
 normal retries; failed recipients are retried on later runs.
 
+On Vercel, the local `node-cron` scheduler is disabled. The schedule in
+`vercel.json` instead calls `POST /api/cron/bookings/completion` every 15 minutes.
+Set `CRON_SECRET` in the Vercel project to a random value of at least 16
+characters; Vercel sends it as a Bearer token and the endpoint rejects requests
+without it. The 15-minute cadence is compatible with Vercel Hobby schedules, so
+booking updates and completion emails may be delayed compared with local runs.
+
 Configure SMTP in the backend `.env` to enable completion emails:
 
 ```env
