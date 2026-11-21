@@ -4,6 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import mongoose from "mongoose";
+import { getFrontendOrigin } from "./config/frontend-origin.js";
 import { isAccountStatusActive } from "./services/account-status.js";
 
 export function isRoleInputAllowed(path, role) {
@@ -174,7 +175,7 @@ export function createAuth() {
     database: mongodbAdapter(database, { client, transaction: false }),
     secret,
     baseURL,
-    trustedOrigins: [process.env.FRONTEND_URL || "http://localhost:3000"],
+    trustedOrigins: [getFrontendOrigin()],
     advanced: {
       defaultCookieAttributes: {
         sameSite: secureCookies ? "none" : "lax",

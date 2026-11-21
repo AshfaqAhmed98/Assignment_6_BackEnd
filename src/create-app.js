@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
+import { getFrontendOrigin } from "./config/frontend-origin.js";
 import { toNodeHandler } from "better-auth/node";
 import { createEquipmentRouter } from "./routes/equipment.routes.js";
 import { createBookingsRouter } from "./routes/bookings.routes.js";
@@ -23,7 +24,7 @@ export function createApp(
 
   app.use(
     cors({
-      origin: process.env.FRONTEND_URL || "http://localhost:3000",
+      origin: getFrontendOrigin(),
       credentials: true,
     }),
   );
