@@ -8,6 +8,7 @@ import { BookingReservationLock } from "../models/booking-reservation-lock.model
 import { Equipment } from "../models/equipment.model.js";
 import { Favorite } from "../models/favorite.model.js";
 import { Payment } from "../models/payment.model.js";
+import { Review } from "../models/review.model.js";
 import { getBookingStatus } from "../services/booking-status.js";
 import {
   accountStatuses,
@@ -574,6 +575,7 @@ export function createAdminRouter(auth, stripe) {
             Equipment,
             Favorite,
             Payment,
+            Review,
           },
         });
       } catch (error) {

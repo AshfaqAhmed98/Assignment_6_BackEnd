@@ -116,6 +116,12 @@ export async function permanentlyDeleteUserData({
       { equipmentId: { $in: equipmentIds } },
     ],
   });
+  await models.Review.deleteMany({
+    $or: [
+      { customerId: { $in: userIdValues } },
+      { bookingId: { $in: bookingIds } },
+    ],
+  });
   await models.Payment.deleteMany({
     $or: [
       { customerId: { $in: userIdValues } },

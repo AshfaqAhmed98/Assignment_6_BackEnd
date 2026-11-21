@@ -39,6 +39,7 @@ function createDependencies({ reservations = [] } = {}) {
       "BookingReservation",
     ),
     Favorite: createModel([], calls, "Favorite"),
+    Review: createModel([], calls, "Review"),
     Payment: createModel([], calls, "Payment"),
     BookingReservationLock: createModel([], calls, "BookingReservationLock"),
   };
@@ -108,6 +109,10 @@ test("purges linked local records and expires pending Stripe checkout first", as
   );
   assert.deepEqual(
     calls.find((call) => call.operation === "Payment.deleteMany").filter.$or[1],
+    { bookingId: { $in: [bookingId] } },
+  );
+  assert.deepEqual(
+    calls.find((call) => call.operation === "Review.deleteMany").filter.$or[1],
     { bookingId: { $in: [bookingId] } },
   );
 });

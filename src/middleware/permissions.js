@@ -6,6 +6,7 @@ const permissionRoles = Object.freeze({
   "equipment:manage-own": ["Owner", "Admin"],
   "equipment:approve": ["Admin"],
   "favorites:manage-own": ["Customer"],
+  "reviews:manage-own": ["Customer"],
   "booking:create": ["Customer"],
   "booking:read-own": ["Customer"],
   "booking:read-own-equipment": ["Owner"],

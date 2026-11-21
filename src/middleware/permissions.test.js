@@ -63,6 +63,7 @@ test("allows only customers to manage favorites and bookings", () => {
   );
   assert.equal(invokePermission("booking:create", "Customer").nextCalled, true);
   assert.equal(invokePermission("booking:read-own", "Customer").nextCalled, true);
+  assert.equal(invokePermission("reviews:manage-own", "Customer").nextCalled, true);
   for (const role of ["Owner", "Admin"]) {
     assert.equal(
       invokePermission("favorites:manage-own", role).response.statusCode,
@@ -74,6 +75,10 @@ test("allows only customers to manage favorites and bookings", () => {
     );
     assert.equal(
       invokePermission("booking:read-own", role).response.statusCode,
+      403,
+    );
+    assert.equal(
+      invokePermission("reviews:manage-own", role).response.statusCode,
       403,
     );
   }

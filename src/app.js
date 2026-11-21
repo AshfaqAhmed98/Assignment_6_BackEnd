@@ -11,6 +11,7 @@ import {
 } from "./routes/payments.routes.js";
 import { createUploadsRouter } from "./routes/profile-photo.routes.js";
 import { createAdminRouter } from "./routes/admin.routes.js";
+import { createReviewsRouter } from "./routes/reviews.routes.js";
 import { createStripeClient } from "./services/stripe-client.js";
 
 export function createApp(auth, stripe = createStripeClient()) {
@@ -57,6 +58,7 @@ export function createApp(auth, stripe = createStripeClient()) {
   });
 
   app.use("/api/equipment", createEquipmentRouter(auth));
+  app.use("/api/reviews", createReviewsRouter(auth));
   app.use("/api/favorites", createFavoritesRouter(auth));
   app.use("/api/bookings", createBookingsRouter(auth, stripe));
   app.use("/api/payments", createPaymentsRouter(auth));

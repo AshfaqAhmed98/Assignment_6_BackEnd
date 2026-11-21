@@ -6,6 +6,7 @@ import { Booking } from "../models/booking.model.js";
 import { BookingReservation } from "../models/booking-reservation.model.js";
 import { Equipment } from "../models/equipment.model.js";
 import { Payment } from "../models/payment.model.js";
+import { Review } from "../models/review.model.js";
 import {
   EquipmentReservationLockError,
   getAvailableQuantity,
@@ -226,8 +227,16 @@ export function createBookingsRouter(auth, stripe) {
     const equipment = await Equipment.find({ _id: { $in: equipmentIds } })
       .select("name")
       .lean();
+    const reviews = await Review.find({
+      bookingId: { $in: bookings.map((booking) => booking._id) },
+    })
+      .select("bookingId")
+      .lean();
     const equipmentNames = new Map(
       equipment.map((item) => [item._id.toString(), item.name]),
+    );
+    const reviewedBookingIds = new Set(
+      reviews.map((review) => review.bookingId.toString()),
     );
 
     return response.json({
@@ -246,6 +255,7 @@ export function createBookingsRouter(auth, stripe) {
           booking.startDate,
           booking.endDate,
         ),
+        reviewSubmitted: reviewedBookingIds.has(booking._id.toString()),
       })),
     });
   });

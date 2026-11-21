@@ -169,6 +169,8 @@ records to the current account:
 | --- | --- | --- |
 | `GET /api/bookings` | Customer | List the signed-in customer's paid bookings |
 | `POST /api/bookings/checkout` | Customer | Reserve equipment and start Stripe Checkout |
+| `GET /api/reviews` | Public | List the latest 8 renter reviews |
+| `POST /api/reviews` | Customer | Submit a 1–5-star review for a completed paid booking |
 | `GET /api/favorites` | Customer | List the signed-in customer's saved equipment |
 | `GET /api/favorites/:equipmentId` | Customer | Check whether an item is saved |
 | `POST /api/favorites/:equipmentId` | Customer | Save an approved item |
@@ -178,6 +180,10 @@ Booking rows are created only after a verified Stripe payment. Their booking
 status is derived from the rental dates: `upcoming`, `ongoing`, or `completed`.
 The end date is exclusive, so a booking is completed at the start of its return
 date. Favorites and booking queries never accept a customer ID from the caller.
+Customers may submit one review per completed booking; reviews are published
+immediately and include the renter's account name, equipment name, rating, and
+comment. The customer bookings response includes `reviewSubmitted` for each
+booking.
 
 ## Owner dashboard APIs
 
