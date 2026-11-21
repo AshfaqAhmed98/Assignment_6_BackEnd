@@ -16,8 +16,10 @@ import { createContactRouter } from "./routes/contact.routes.js";
 import { createBookingCompletionCronRouter } from "./routes/cron.routes.js";
 import { createStripeClient } from "./services/stripe-client.js";
 
-export function createApp(auth, stripe = createStripeClient()) {
-  const app = express();
+export function createApp(
+  auth,
+  { app = express(), stripe = createStripeClient() } = {},
+) {
 
   app.use(
     cors({

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import dns from "node:dns";
+import express from "express";
 import { createApp } from "./create-app.js";
 import { createAuth } from "./auth.js";
 import { connectToDatabase } from "./config/database.js";
@@ -27,7 +28,7 @@ if (databaseReady) {
   }
 }
 
-const app = createApp(auth);
+const app = createApp(auth, { app: express() });
 
 app.listen(port, () => {
   console.log(`GearRent API running on http://localhost:${port}`);
