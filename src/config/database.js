@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import mongoose from "mongoose";
 
 export async function connectToDatabase() {
@@ -7,6 +8,7 @@ export async function connectToDatabase() {
     throw new Error("MONGODB_URI is not configured.");
   }
 
+  dns.setServers(["1.1.1.1", "8.8.8.8"]);
   await mongoose.connect(MONGODB_URI, {
     serverSelectionTimeoutMS: 5000,
   });

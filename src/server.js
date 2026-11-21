@@ -1,13 +1,10 @@
 import "dotenv/config";
-import dns from "node:dns";
 import express from "express";
 import { createApp } from "./create-app.js";
 import { createAuth } from "./auth.js";
 import { connectToDatabase } from "./config/database.js";
 import { scheduleBookingCompletionUpdates } from "./services/booking-completion-job.js";
 import { createBookingCompletionMailer } from "./services/booking-completion-email.js";
-
-dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
 const port = Number(process.env.PORT) || 5000;
 let auth;
