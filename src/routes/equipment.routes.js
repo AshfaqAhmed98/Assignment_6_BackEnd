@@ -320,7 +320,7 @@ export function createEquipmentRouter(auth) {
     const approvedEquipment = await Equipment.find({
       approvalStatus: "approved",
     })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .select("name category location dailyRate image description ownerId")
       .lean();
     const equipment = (await filterActiveOwnerEquipment(approvedEquipment)).slice(
@@ -328,7 +328,7 @@ export function createEquipmentRouter(auth) {
       6,
     );
 
-    response.json({
+    response.set("Cache-Control", "no-store").json({
       items: equipment.map((item) => ({
         id: item._id.toString(),
         name: item.name,
