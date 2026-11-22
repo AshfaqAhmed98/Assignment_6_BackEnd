@@ -224,7 +224,10 @@ export function createBookingsRouter(auth, stripe) {
       .sort({ createdAt: -1 })
       .lean();
     const equipmentIds = bookings.map((booking) => booking.equipmentId);
-    const equipment = await Equipment.find({ _id: { $in: equipmentIds } })
+    const equipment = await Equipment.find({
+      _id: { $in: equipmentIds },
+      approvalStatus: "approved",
+    })
       .select("name")
       .lean();
     const reviews = await Review.find({
@@ -235,6 +238,7 @@ export function createBookingsRouter(auth, stripe) {
     const equipmentNames = new Map(
       equipment.map((item) => [item._id.toString(), item.name]),
     );
+    const approvedEquipmentIds = new Set(equipmentNames.keys());
     const reviewedBookingIds = new Set(
       reviews.map((review) => review.bookingId.toString()),
     );
@@ -242,6 +246,9 @@ export function createBookingsRouter(auth, stripe) {
     return response.json({
       items: bookings.map((booking) => ({
         id: booking._id.toString(),
+        equipmentId: approvedEquipmentIds.has(booking.equipmentId.toString())
+          ? booking.equipmentId.toString()
+          : null,
         equipmentName:
           equipmentNames.get(booking.equipmentId.toString()) ??
           "Equipment no longer available",
