@@ -30,6 +30,7 @@ const editableFields = new Set([
   "dailyRate",
   "rentalPrice",
   "rentalType",
+  "quantity",
   "image",
   "description",
   "condition",
@@ -37,7 +38,7 @@ const editableFields = new Set([
   "model",
   "rentalTerms",
 ]);
-const creatableFields = new Set([...editableFields, "quantity"]);
+const creatableFields = editableFields;
 const requiredEquipmentFields = [
   "name",
   "category",

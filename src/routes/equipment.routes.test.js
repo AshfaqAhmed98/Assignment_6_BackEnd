@@ -47,6 +47,21 @@ test("keeps legacy daily-rate equipment requests valid", () => {
   });
 });
 
+test("allows valid quantity changes in partial equipment updates", () => {
+  assert.deepEqual(
+    parseEquipmentInput({ quantity: 12 }, { partial: true }),
+    { quantity: 12 },
+  );
+  assert.equal(
+    parseEquipmentInput({ quantity: 0 }, { partial: true }),
+    null,
+  );
+  assert.equal(
+    parseEquipmentInput({ quantity: 10001 }, { partial: true }),
+    null,
+  );
+});
+
 test("rejects mismatched pricing fields and owner-controlled status data", () => {
   assert.equal(
     parseEquipmentInput({
