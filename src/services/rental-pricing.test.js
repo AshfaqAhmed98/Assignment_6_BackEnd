@@ -3,8 +3,20 @@ import test from "node:test";
 import {
   calculateRentalPrice,
   countAvailableQuantity,
+  getDhakaStartOfDay,
   parseRentalDateRange,
 } from "./rental-pricing.js";
+
+test("uses Bangladesh local date for equipment available today", () => {
+  assert.equal(
+    getDhakaStartOfDay(new Date("2026-11-22T22:30:00.000Z")).toISOString(),
+    "2026-11-23T00:00:00.000Z",
+  );
+  assert.equal(
+    getDhakaStartOfDay(new Date("2026-11-22T17:59:59.999Z")).toISOString(),
+    "2026-11-22T00:00:00.000Z",
+  );
+});
 
 test("counts elapsed rental dates and bills at least one day", () => {
   const sameDay = parseRentalDateRange("2026-11-19", "2026-11-19");

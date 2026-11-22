@@ -15,6 +15,7 @@ import {
   parseEquipmentListingQuery,
 } from "../services/equipment-listing.js";
 import {
+  getDhakaStartOfDay,
   getUtcStartOfDay,
   parseRentalDateRange,
 } from "../services/rental-pricing.js";
@@ -289,14 +290,7 @@ export function createEquipmentRouter(auth) {
     const categories = [
       ...new Set(equipment.map((item) => item.category)),
     ].sort((left, right) => left.localeCompare(right));
-    const currentDate = new Date();
-    const startDate = new Date(
-      Date.UTC(
-        currentDate.getUTCFullYear(),
-        currentDate.getUTCMonth(),
-        currentDate.getUTCDate(),
-      ),
-    );
+    const startDate = getDhakaStartOfDay();
     const availableQuantities = await getAvailableQuantities({
       equipment,
       startDate,

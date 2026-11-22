@@ -12,6 +12,24 @@ export function getUtcStartOfDay(date = new Date()) {
   );
 }
 
+export function getDhakaStartOfDay(date = new Date()) {
+  const dateParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .formatToParts(date)
+    .filter((part) => ["year", "month", "day"].includes(part.type));
+  const dateValues = Object.fromEntries(
+    dateParts.map(({ type, value }) => [type, value]),
+  );
+
+  return new Date(
+    `${dateValues.year}-${dateValues.month}-${dateValues.day}T00:00:00.000Z`,
+  );
+}
+
 export function parseRentalDateRange(startDateValue, endDateValue) {
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   if (
